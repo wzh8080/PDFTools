@@ -80,6 +80,7 @@
   .chk{display:flex;align-items:flex-start;gap:9px;margin-top:16px;font-size:13.5px;font-weight:600;cursor:pointer;}
   .chk input{width:17px;height:17px;margin:1px 0 0;accent-color:var(--primary);flex:none;}
   .chk .chk-sub{display:block;font-size:11.5px;font-weight:400;color:var(--ink-2);margin-top:2px;}
+  .trim-note{font-size:11.5px;color:#9aa6b8;margin:5px 0 0 26px;}
 
   /* preview */
   .pv-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;}
@@ -207,9 +208,10 @@
         <div class="muted" style="margin-top:2px;">扫描有偏移时，可整体左右移动切分线（相对栏宽）</div>
       </div>
       <label class="chk">
-        <input type="checkbox" id="trim-chk" checked>
+        <input type="checkbox" id="trim-chk">
         <span>裁掉页面四周白边<span class="chk-sub">按每栏实际有字范围裁剪，放大后更铺满 A4</span></span>
       </label>
+      <div class="trim-note" id="trim-note" hidden>开启白边裁剪，处理会稍慢哦</div>
     </section>
 
     <!-- 预览 -->

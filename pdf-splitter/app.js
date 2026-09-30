@@ -20,7 +20,7 @@
     marginX: 10,           // 左右边距 mm
     marginY: 5,            // 上下边距 mm
     shift: 0,
-    trim: true,
+    trim: false,         // 默认不勾；用户勾过一次就记住（见 TRIM_KEY）
     busy: false,
     resultBytes: null,
     resultUrl: null,
@@ -386,8 +386,15 @@
     if (!cardPreview.hidden) updateOverlays();
     resetResult();
   });
+  // 白边裁剪默认关；用户选过一次就记住（file:// 或隐私模式下 localStorage 会抛，忽略即可）
+  var TRIM_KEY = 'pdfsplitter.trimWhite';
+  try { state.trim = localStorage.getItem(TRIM_KEY) === '1'; } catch (e) {}
+  $('trim-chk').checked = state.trim;
+  $('trim-note').hidden = !state.trim;
   $('trim-chk').addEventListener('change', function () {
     state.trim = this.checked;
+    $('trim-note').hidden = !state.trim;
+    try { localStorage.setItem(TRIM_KEY, state.trim ? '1' : '0'); } catch (e) {}
     resetResult();
   });
 

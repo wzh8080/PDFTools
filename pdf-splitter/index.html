@@ -95,7 +95,6 @@
   .pv-foot b{color:var(--ink);font-weight:600;}
 
   /* progress */
-  .prog{display:flex;flex-direction:column;gap:8px;}
   .pbar{height:10px;border-radius:999px;background:#e7edf6;overflow:hidden;}
   .pbar-fill{height:100%;width:0;background:linear-gradient(90deg,var(--primary),#4f83f7);border-radius:999px;transition:width .2s;}
   .prog-t{font-size:13px;color:var(--ink-2);text-align:center;}
@@ -118,11 +117,13 @@
 
   /* sticky action bar */
   .action-bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:10px 14px calc(10px + env(safe-area-inset-bottom));z-index:20;}
-  .action-bar .ab-inner{max-width:680px;margin:0 auto;display:flex;gap:10px;}
+  .action-bar .ab-inner{max-width:680px;margin:0 auto;}
+  .ab-row{display:flex;gap:10px;}
   .action-bar .btn{width:100%;}
-  .ab-prog{display:none;flex-direction:column;gap:6px;}
+  .ab-prog{display:none;flex-direction:column;gap:6px;margin-bottom:9px;}
+  .ab-prog.on{display:flex;}
   .ab-prog .pbar{height:8px;}
-  .ab-prog .prog-t{margin:0;}
+  .ab-prog .prog-t{margin:0;font-size:12.5px;}
 
   footer{text-align:center;font-size:11.5px;color:var(--ink-2);padding:6px 0 2px;}
 
@@ -192,9 +193,13 @@
         <button data-mode="1">不切分<span class="seg-sub">仅转 A4 版式</span></button>
       </div>
       <div class="field">
-        <label>页边距 <span><b id="margin-val">4</b> mm</span></label>
-        <input type="range" id="margin-range" min="0" max="10" value="4">
-        <div class="muted" style="margin-top:2px;">切出的图片四周到 A4 纸边的留白，设 0 即尽量铺满整页</div>
+        <label>左右边距 <span><b id="margin-x-val">10</b> mm</span></label>
+        <input type="range" id="margin-x-range" min="0" max="20" value="10">
+      </div>
+      <div class="field">
+        <label>上下边距 <span><b id="margin-y-val">5</b> mm</span></label>
+        <input type="range" id="margin-y-range" min="0" max="20" value="5">
+        <div class="muted" style="margin-top:2px;">指切出的图片到 A4 纸边的留白。多数试卷栏形偏窄，实际由上下边距决定放大率；左右留多一点方便装订打孔，不额外缩小内容</div>
       </div>
       <div class="field">
         <label>切分线微调 <span><b id="shift-val">0</b>%</span></label>
@@ -214,14 +219,6 @@
         <span class="badge" id="out-badge">将生成 0 页</span>
       </div>
       <div class="pv-grid" id="pv-grid"></div>
-    </section>
-
-    <!-- 进度 -->
-    <section class="card" id="card-progress" hidden>
-      <div class="prog">
-        <div class="pbar"><div class="pbar-fill" id="p-fill"></div></div>
-        <div class="prog-t" id="p-text">正在处理…</div>
-      </div>
     </section>
 
     <!-- 结果 -->
@@ -266,8 +263,14 @@
 <!-- 底部固定操作栏 -->
 <div class="action-bar" id="action-bar" hidden>
   <div class="ab-inner">
-    <button class="btn btn-ghost" id="btn-repick2">更换文件</button>
-    <button class="btn btn-primary" id="btn-process">开始切分</button>
+    <div class="ab-prog" id="ab-prog">
+      <div class="pbar"><div class="pbar-fill" id="p-fill"></div></div>
+      <div class="prog-t" id="p-text">正在处理…</div>
+    </div>
+    <div class="ab-row">
+      <button class="btn btn-ghost" id="btn-repick2">更换文件</button>
+      <button class="btn btn-primary" id="btn-process">开始切分</button>
+    </div>
   </div>
 </div>
 

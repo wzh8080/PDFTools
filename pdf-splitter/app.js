@@ -17,9 +17,11 @@
     pdf: null,           // pdf.js 文档
     sizes: [],           // 每页 {W,H}
     mode: 'auto',
-    margin: 4,
+    marginX: 10,           // 左右边距 mm
+    marginY: 5,            // 上下边距 mm
     shift: 0,
     trim: true,
+    busy: false,
     resultBytes: null,
     resultUrl: null,
     resultName: 'split.pdf'
@@ -30,7 +32,7 @@
   var dropzone = $('dropzone'), fileInput = $('file-input');
   var cardUpload = $('card-upload'), cardFile = $('card-file'),
       cardConfig = $('card-config'), cardPreview = $('card-preview'),
-      cardProgress = $('card-progress'), cardResult = $('card-result'),
+      cardResult = $('card-result'), abProg = $('ab-prog'),
       actionBar = $('action-bar');
   var pvGrid = $('pv-grid');
 
@@ -102,7 +104,6 @@
 
   // ---- 裁白边 ----
   // 把该栏渲染成位图，扫出有墨迹的最小矩形，作为真正的裁剪框
-  var TRIM_PX = 1100;      // 检测用的长边像素，够定位页边又不至于太慢
   var TRIM_PAD = 3;        // pt，留一点余量避免削到笔画
 
   function scanInk(data, w, h, scale, ox) {
@@ -130,11 +131,46 @@
     return { left: left, right: right, top: top, bottom: bottom };  // y 向下，调用方换算
   }
 
+  function scanBands(ctx, scale, pageH, bands) {
+    return bands.map(function (bd) {
+      var px0 = Math.max(0, Math.floor(bd.left * scale));
+      var px1 = Math.min(ctx.canvas.width, Math.ceil(bd.right * scale));
+      var pw = px1 - px0;
+      if (pw <= 0 || ctx.canvas.height <= 0) return null;
+      var box = scanInk(ctx.getImageData(px0, 0, pw, ctx.canvas.height).data,
+                        pw, ctx.canvas.height, scale, px0 / scale);
+      if (!box) return null;
+      var res = {
+        left: Math.max(bd.left, box.left),
+        right: Math.min(bd.right, box.right),
+        bottom: Math.max(0, pageH - box.bottom),
+        top: Math.min(pageH, pageH - box.top)
+      };
+      return res.right - res.left > 8 && res.top - res.bottom > 8 ? res : null;
+    });
+  }
+
+  // 预览已经栅格化过的页，直接复用它的位图，同一页不必渲染两遍
+  function paintedPreview(pno) {
+    if (previewItems.length !== state.sizes.length) return null;  // 预览与新文件不同步时不复用
+    var it = previewItems[pno];
+    if (!it || !it.painted) return null;
+    var c = it.el.querySelector('canvas');
+    if (!c || c.width < 80 || c.height < 80) return null;
+    return c;
+  }
+
   // 返回每栏收紧后的裁剪框；检测不到墨迹的栏返回 null，由调用方保留原始整栏
   function trimBands(pno, pageH, bands) {
+    var pc = paintedPreview(pno);
+    var sz = state.sizes[pno];
+    if (pc && sz) {
+      return Promise.resolve(scanBands(pc.getContext('2d'), pc.width / sz.W, pageH, bands));
+    }
     return state.pdf.getPage(pno + 1).then(function (page) {
       var vp0 = page.getViewport({ scale: 1 });
-      var scale = Math.min(2, TRIM_PX / Math.max(vp0.width, vp0.height));
+      // 与预览同一尺度，保证屏幕内外的页切出来的边距一致
+      var scale = Math.min(2, RENDER_W / vp0.width);
       var vp = page.getViewport({ scale: scale });
       var canvas = document.createElement('canvas');
       canvas.width = Math.ceil(vp.width);
@@ -144,22 +180,7 @@
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       return page.render({ canvasContext: ctx, viewport: vp }).promise.then(function () {
-        return bands.map(function (bd) {
-          var px0 = Math.max(0, Math.floor(bd.left * scale));
-          var px1 = Math.min(canvas.width, Math.ceil(bd.right * scale));
-          var pw = px1 - px0;
-          if (pw <= 0 || canvas.height <= 0) return null;
-          var box = scanInk(ctx.getImageData(px0, 0, pw, canvas.height).data,
-                            pw, canvas.height, scale, px0 / scale);
-          if (!box) return null;
-          var res = {
-            left: Math.max(bd.left, box.left),
-            right: Math.min(bd.right, box.right),
-            bottom: Math.max(0, pageH - box.bottom),
-            top: Math.min(pageH, pageH - box.top)
-          };
-          return res.right - res.left > 8 && res.top - res.bottom > 8 ? res : null;
-        });
+        return scanBands(ctx, scale, pageH, bands);
       }).then(function (r) {
         canvas.width = canvas.height = 0;   // 及时释放，扫描件位图很占内存
         return r;
@@ -187,7 +208,6 @@
     }
     resetResult();
     cardResult.hidden = true;
-    cardProgress.hidden = true;
     cardFile.hidden = true;
     cardConfig.hidden = true;
     cardPreview.hidden = true;
@@ -221,7 +241,13 @@
   function ab2bytes(ab) { return new Uint8Array(ab); }
 
   function openPdf() {
-    return pdfjsLib.getDocument({ data: state.bytes.slice(0) }).promise.then(function (pdf) {
+    // 换文件时释放上一份：pdf.js 的文档缓存与 worker 会一直占着内存，手机上吃紧
+    var prev = state.pdf;
+    state.pdf = null;
+    var rel = prev ? prev.destroy().catch(function () {}) : Promise.resolve();
+    return rel.then(function () {
+      return pdfjsLib.getDocument({ data: state.bytes.slice(0) }).promise;
+    }).then(function (pdf) {
       state.pdf = pdf;
       var jobs = [];
       for (var i = 1; i <= pdf.numPages; i++) {
@@ -238,9 +264,10 @@
 
   // ---- 预览 ----
   var RENDER_W = 820; // 预览 canvas 逻辑宽度
+  var previewItems = [];
   function buildPreview() {
     pvGrid.innerHTML = '';
-    var items = [];
+    var items = previewItems = [];
     for (var i = 0; i < state.sizes.length; i++) {
       (function (idx) {
         var s = state.sizes[idx];
@@ -253,7 +280,7 @@
           '</div>' +
           '<div class="pv-foot"></div>';
         pvGrid.appendChild(item);
-        items.push({ idx: idx, el: item, s: s, rendered: false });
+        items.push({ idx: idx, el: item, s: s, rendered: false, painted: false });
       })(i);
     }
     updateOverlays();
@@ -265,14 +292,25 @@
     }
     var io = new IntersectionObserver(function (entries) {
       entries.forEach(function (en) {
-        if (en.isIntersecting) {
-          var it = en.target.__it;
-          if (it && !it.rendered) renderItem(it);
-          io.unobserve(en.target);
-        }
+        if (!en.isIntersecting) return;
+        // 切分时预览与裁白边检测共用同一个 pdf.js 队列，处理中先让路，
+        // 不 unobserve，留给 renderVisiblePending() 补渲染
+        if (state.busy) return;
+        var it = en.target.__it;
+        if (it && !it.rendered) renderItem(it);
+        io.unobserve(en.target);
       });
     }, { rootMargin: '200px' });
     items.forEach(function (it) { it.el.__it = it; io.observe(it.el); });
+  }
+
+  function renderVisiblePending() {
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    previewItems.forEach(function (it) {
+      if (it.rendered) return;
+      var r = it.el.getBoundingClientRect();
+      if (r.bottom > -200 && r.top < vh + 200) renderItem(it);
+    });
   }
 
   function renderItem(it) {
@@ -283,6 +321,8 @@
       canvas.width = Math.round(viewport.width);
       canvas.height = Math.round(viewport.height);
       return page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
+    }).then(function () {
+      it.painted = true;   // 位图真正可用，裁白边时可以直接复用
     }).catch(function (e) { console.error('render', it.idx, e); });
     it.rendered = true;
     return vp;
@@ -330,9 +370,14 @@
     if (!cardPreview.hidden) updateOverlays();
     resetResult();
   });
-  $('margin-range').addEventListener('input', function () {
-    state.margin = parseInt(this.value, 10);
-    $('margin-val').textContent = state.margin;
+  $('margin-x-range').addEventListener('input', function () {
+    state.marginX = parseInt(this.value, 10);
+    $('margin-x-val').textContent = state.marginX;
+    resetResult();
+  });
+  $('margin-y-range').addEventListener('input', function () {
+    state.marginY = parseInt(this.value, 10);
+    $('margin-y-val').textContent = state.marginY;
     resetResult();
   });
   $('shift-range').addEventListener('input', function () {
@@ -349,15 +394,18 @@
   // ---- 切分生成 ----
   $('btn-process').addEventListener('click', process);
   function setProgress(pct, text) {
-    cardProgress.hidden = false;
+    abProg.classList.add('on');
     $('p-fill').style.width = pct + '%';
     $('p-text').textContent = text;
   }
+  function clearProgress() {
+    abProg.classList.remove('on');
+  }
 
   async function process() {
-    if (!state.bytes) return;
+    if (!state.bytes || state.busy) return;
+    state.busy = true;
     cardResult.hidden = true;
-    cardProgress.hidden = false;
     setProgress(2, '正在读取 PDF…');
     var btn = $('btn-process');
     btn.disabled = true;
@@ -402,12 +450,13 @@
       setProgress(8, '正在嵌入页面内容…');
       await tick();
       var embs = await out.embedPages(embedList, bbs);
-      var marginPt = state.margin * 72 / 25.4;
+      var mm2pt = 72 / 25.4;
+      var marginX = state.marginX * mm2pt, marginY = state.marginY * mm2pt;
 
       for (var i = 0; i < embs.length; i++) {
         var emb = embs[i];
         var np = out.addPage([A4W, A4H]);
-        var aw = A4W - 2 * marginPt, ah = A4H - 2 * marginPt;
+        var aw = A4W - 2 * marginX, ah = A4H - 2 * marginY;
         var s = Math.min(aw / emb.width, ah / emb.height);
         var dw = emb.width * s, dh = emb.height * s;
         np.drawPage(emb, { x: (A4W - dw) / 2, y: (A4H - dh) / 2, width: dw, height: dh });
@@ -432,15 +481,18 @@
       }
       $('r-sub').textContent = '共 ' + t + ' 页 · A4 纵向 · ' + fmtSize(bytes.length);
       cardResult.hidden = false;
-      cardProgress.hidden = true;
+      clearProgress();
       cardResult.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } catch (e) {
       console.error(e);
-      cardProgress.hidden = true;
+      clearProgress();
       alert('处理失败：\n' + (e && e.message ? e.message : e));
     } finally {
       btn.disabled = false;
       btn.textContent = '重新切分';
+      state.busy = false;
+      // 补渲染处理期间被让路的预览（滚动已到位后再补，避免又排队）
+      setTimeout(renderVisiblePending, 400);
     }
   }
 

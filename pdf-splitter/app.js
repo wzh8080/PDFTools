@@ -17,8 +17,8 @@
     pdf: null,           // pdf.js 文档
     sizes: [],           // 每页 {W,H}
     mode: 'auto',
-    marginX: 10,           // 左右边距 mm
-    marginY: 5,            // 上下边距 mm
+    marginX: 10,         // 左右边距 mm，滑块 0–20
+    marginY: 20,         // 上下边距 mm，滑块 0–40（决定放大率）
     shift: 0,
     trim: false,         // 默认不勾；用户勾过一次就记住（见 TRIM_KEY）
     busy: false,
@@ -274,7 +274,7 @@
         var item = document.createElement('div');
         item.className = 'pv-item';
         item.innerHTML =
-          '<div class="pv-wrap">' +
+          '<div class="pv-wrap" style="aspect-ratio:' + Math.round(s.W) + ' / ' + Math.round(s.H) + '">' +
             '<canvas></canvas>' +
             '<div class="cut-layer"></div>' +
           '</div>' +
@@ -437,6 +437,8 @@
           bands.push({ left: x0, right: x0 + cw });
         }
 
+        // 已预览过的页在 trimBands 里直接复用位图；没预览过的页要等一次 pdf.js
+        // 栅格化（约 1s/页），这就是「处理会稍慢」提示所指的那段时间
         if (state.trim) {
           setProgress(3 + Math.round(pno / srcPages.length * 5),
             '正在检测白边 ' + (pno + 1) + ' / ' + srcPages.length + ' 页…');
@@ -489,7 +491,9 @@
       $('r-sub').textContent = '共 ' + t + ' 页 · A4 纵向 · ' + fmtSize(bytes.length);
       cardResult.hidden = false;
       clearProgress();
-      cardResult.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // 结果卡是最后一张，直接跳到底部，「保存到本地」就在拇指边。
+      // 不用 smooth 滚动：动画要等 rAF，页面在后台或被长按时可能根本不动
+      window.scrollTo(0, document.body.scrollHeight);
     } catch (e) {
       console.error(e);
       clearProgress();

@@ -77,6 +77,14 @@
   .field label{display:flex;justify-content:space-between;font-size:13.5px;font-weight:600;margin-bottom:6px;}
   .field label span{color:var(--primary);font-weight:700;}
   input[type=range]{width:100%;accent-color:var(--primary);height:28px;}
+
+  /* 紧凑行：标题与滑块同行，三个设置比原来省一半高度 */
+  .field.row{display:flex;align-items:center;gap:10px;margin-top:10px;}
+  .field.row label{flex:none;width:104px;margin:0;display:block;font-size:13px;}
+  .field.row label b{color:var(--primary);font-weight:700;font-variant-numeric:tabular-nums;}
+  .field.row label i{font-style:normal;font-weight:400;color:var(--ink-2);font-size:11px;margin-left:1px;}
+  .field.row input[type=range]{flex:1;min-width:0;}
+  .rows-hint{font-size:11.5px;color:var(--ink-2);line-height:1.5;margin:9px 0 0;}
   .chk{display:flex;align-items:flex-start;gap:9px;margin-top:16px;font-size:13.5px;font-weight:600;cursor:pointer;}
   .chk input{width:17px;height:17px;margin:1px 0 0;accent-color:var(--primary);flex:none;}
   .chk .chk-sub{display:block;font-size:11.5px;font-weight:400;color:var(--ink-2);margin-top:2px;}
@@ -193,20 +201,19 @@
         <button data-mode="3">左中右 3 栏<span class="seg-sub">一页切成三页</span></button>
         <button data-mode="1">不切分<span class="seg-sub">仅转 A4 版式</span></button>
       </div>
-      <div class="field">
-        <label>左右边距 <span><b id="margin-x-val">10</b> mm</span></label>
+      <div class="field row">
+        <label for="margin-x-range">左右边距 <b id="margin-x-val">10</b><i>mm</i></label>
         <input type="range" id="margin-x-range" min="0" max="20" value="10">
       </div>
-      <div class="field">
-        <label>上下边距 <span><b id="margin-y-val">5</b> mm</span></label>
-        <input type="range" id="margin-y-range" min="0" max="20" value="5">
-        <div class="muted" style="margin-top:2px;">指切出的图片到 A4 纸边的留白。多数试卷栏形偏窄，实际由上下边距决定放大率；左右留多一点方便装订打孔，不额外缩小内容</div>
+      <div class="field row">
+        <label for="margin-y-range">上下边距 <b id="margin-y-val">20</b><i>mm</i></label>
+        <input type="range" id="margin-y-range" min="0" max="40" value="20">
       </div>
-      <div class="field">
-        <label>切分线微调 <span><b id="shift-val">0</b>%</span></label>
+      <div class="field row">
+        <label for="shift-range">切分线微调 <b id="shift-val">0</b><i>%</i></label>
         <input type="range" id="shift-range" min="-15" max="15" value="0">
-        <div class="muted" style="margin-top:2px;">扫描有偏移时，可整体左右移动切分线（相对栏宽）</div>
       </div>
+      <div class="rows-hint">边距＝切出的图片到 A4 纸边的留白，上下决定放大率、左右方便装订；微调＝整体左右移动切分线</div>
       <label class="chk">
         <input type="checkbox" id="trim-chk">
         <span>裁掉页面四周白边<span class="chk-sub">按每栏实际有字范围裁剪，放大后更铺满 A4</span></span>

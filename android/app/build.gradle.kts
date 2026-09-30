@@ -33,8 +33,8 @@ android {
         applicationId = "com.pdfsplitter.app"
         minSdk = 29
         targetSdk = 36
-        versionCode = 11
-        versionName = "1.5.1"
+        versionCode = 12
+        versionName = "1.5.2"
     }
 
     signingConfigs {

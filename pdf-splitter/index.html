@@ -84,7 +84,6 @@
   .field.row label b{color:var(--primary);font-weight:700;font-variant-numeric:tabular-nums;}
   .field.row label i{font-style:normal;font-weight:400;color:var(--ink-2);font-size:11px;margin-left:1px;}
   .field.row input[type=range]{flex:1;min-width:0;}
-  .rows-hint{font-size:11.5px;color:var(--ink-2);line-height:1.5;margin:9px 0 0;}
   .chk{display:flex;align-items:flex-start;gap:9px;margin-top:16px;font-size:13.5px;font-weight:600;cursor:pointer;}
   .chk input{width:17px;height:17px;margin:1px 0 0;accent-color:var(--primary);flex:none;}
   .chk .chk-sub{display:block;font-size:11.5px;font-weight:400;color:var(--ink-2);margin-top:2px;}
@@ -213,7 +212,6 @@
         <label for="shift-range">切分线微调 <b id="shift-val">0</b><i>%</i></label>
         <input type="range" id="shift-range" min="-15" max="15" value="0">
       </div>
-      <div class="rows-hint">边距＝切出的图片到 A4 纸边的留白，上下决定放大率、左右方便装订；微调＝整体左右移动切分线</div>
       <label class="chk">
         <input type="checkbox" id="trim-chk">
         <span>裁掉页面四周白边<span class="chk-sub">按每栏实际有字范围裁剪，放大后更铺满 A4</span></span>

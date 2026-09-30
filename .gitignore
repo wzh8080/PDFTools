@@ -1,0 +1,33 @@
+# 依赖
+node_modules/
+
+# 构建产物
+.gradle/
+**/build/
+dist/
+*.apk
+
+# Android 本地配置与签名（机器相关，绝不入库）
+android/local.properties
+android/keystore.properties
+android/keystore/
+*.jks
+*.keystore
+
+# 构建时从 pdf-splitter/ 同步出来的副本，真源在 pdf-splitter/
+android/app/src/main/assets/www/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# 本地调试产物（脚本保留，输出不入库）
+pdftool_test/*.png
+pdftool_test/*.pdf
+pdf_preview/
+
+# Python 缓存
+__pycache__/
+*.pyc

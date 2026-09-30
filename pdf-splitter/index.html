@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#2563eb">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>试卷切分助手 · A3拼版转A4</title>
+<style>
+  :root{
+    --primary:#2563eb;
+    --primary-dark:#1d4ed8;
+    --primary-soft:#eff4ff;
+    --ink:#1f2937;
+    --ink-2:#6b7280;
+    --line:#e5e7eb;
+    --bg:#edf1f6;
+    --cut:#ef4444;
+    --ok:#16a34a;
+    --radius:14px;
+    --shadow:0 1px 2px rgba(16,24,40,.05), 0 2px 8px rgba(16,24,40,.06);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    font-size:15px;
+    line-height:1.55;
+    padding-bottom:calc(86px + env(safe-area-inset-bottom));
+  }
+  .wrap{max-width:680px;margin:0 auto;padding:0 14px;}
+
+  /* header */
+  .topbar{background:#fff;border-bottom:1px solid var(--line);}
+  .topbar .inner{max-width:680px;margin:0 auto;padding:12px 14px;display:flex;align-items:center;gap:12px;}
+  .logo{width:40px;height:40px;border-radius:11px;background:var(--primary);display:flex;align-items:center;justify-content:center;flex:none;}
+  .logo svg{width:24px;height:24px;}
+  .topbar h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.2px;}
+  .topbar p{margin:0;font-size:12px;color:var(--ink-2);}
+
+  main{padding:14px 0 0;display:flex;flex-direction:column;gap:12px;}
+  .card{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;}
+  .card h3{margin:0 0 12px;font-size:15px;font-weight:700;}
+  .muted{color:var(--ink-2);font-size:13px;}
+
+  /* upload */
+  .dropzone{border:2px dashed #c4d2ea;border-radius:12px;padding:30px 18px;text-align:center;background:#fafbff;cursor:pointer;transition:.15s;}
+  .dropzone:active{background:var(--primary-soft);border-color:var(--primary);}
+  .dropzone .dz-ico{width:52px;height:52px;margin:0 auto 10px;display:flex;align-items:center;justify-content:center;background:var(--primary-soft);border-radius:50%;}
+  .dropzone .dz-ico svg{width:26px;height:26px;}
+  .dropzone .dz-t{font-weight:700;font-size:16px;color:var(--primary);}
+  .dropzone .dz-s{font-size:12.5px;color:var(--ink-2);margin-top:4px;}
+
+  .file-info{display:flex;align-items:center;gap:12px;}
+  .file-info .fi-ico{width:38px;height:38px;border-radius:9px;background:var(--primary-soft);display:flex;align-items:center;justify-content:center;flex:none;}
+  .file-info .fi-ico svg{width:20px;height:20px;}
+  .file-info .fi-meta{flex:1;min-width:0;}
+  .file-info .fi-name{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .file-info .fi-sub{font-size:12px;color:var(--ink-2);}
+  .link-btn{background:none;border:none;color:var(--primary);font-size:13px;font-weight:600;padding:6px 8px;cursor:pointer;flex:none;}
+
+  /* segmented */
+  .seg{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .seg button{border:1.5px solid var(--line);background:#fff;border-radius:10px;padding:11px 6px;font-size:13.5px;font-weight:600;color:var(--ink-2);cursor:pointer;transition:.12s;}
+  .seg button .seg-sub{display:block;font-size:11px;font-weight:400;color:var(--ink-2);margin-top:2px;}
+  .seg button.active{border-color:var(--primary);background:var(--primary-soft);color:var(--primary);}
+  .seg button.active .seg-sub{color:var(--primary);}
+
+  .field{margin-top:16px;}
+  .field label{display:flex;justify-content:space-between;font-size:13.5px;font-weight:600;margin-bottom:6px;}
+  .field label span{color:var(--primary);font-weight:700;}
+  input[type=range]{width:100%;accent-color:var(--primary);height:28px;}
+  .chk{display:flex;align-items:flex-start;gap:9px;margin-top:16px;font-size:13.5px;font-weight:600;cursor:pointer;}
+  .chk input{width:17px;height:17px;margin:1px 0 0;accent-color:var(--primary);flex:none;}
+  .chk .chk-sub{display:block;font-size:11.5px;font-weight:400;color:var(--ink-2);margin-top:2px;}
+
+  /* preview */
+  .pv-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;}
+  .pv-head h3{margin:0;}
+  .badge{font-size:12px;font-weight:600;color:var(--primary);background:var(--primary-soft);padding:4px 10px;border-radius:999px;white-space:nowrap;}
+  .pv-grid{display:flex;flex-direction:column;gap:14px;}
+  .pv-item{border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+  .pv-wrap{position:relative;width:100%;background:#f3f5f9;}
+  .pv-wrap canvas{display:block;width:100%;height:auto;}
+  .cut-line{position:absolute;top:0;bottom:0;width:0;border-left:2px dashed var(--cut);transform:translateX(-1px);pointer-events:none;}
+  .cut-lbl{position:absolute;top:3px;transform:translateX(-50%);background:var(--cut);color:#fff;font-size:10px;line-height:1;padding:2px 5px;border-radius:4px;white-space:nowrap;}
+  .pv-foot{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;font-size:12px;color:var(--ink-2);background:#fff;}
+  .pv-foot b{color:var(--ink);font-weight:600;}
+
+  /* progress */
+  .prog{display:flex;flex-direction:column;gap:8px;}
+  .pbar{height:10px;border-radius:999px;background:#e7edf6;overflow:hidden;}
+  .pbar-fill{height:100%;width:0;background:linear-gradient(90deg,var(--primary),#4f83f7);border-radius:999px;transition:width .2s;}
+  .prog-t{font-size:13px;color:var(--ink-2);text-align:center;}
+
+  /* result */
+  .result{text-align:center;}
+  .result .r-ico{width:56px;height:56px;margin:4px auto 12px;background:#e9f8ef;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+  .result .r-ico svg{width:28px;height:28px;}
+  .result h3{margin:0;font-size:17px;}
+  .result .r-sub{font-size:13px;color:var(--ink-2);margin:4px 0 16px;}
+  .r-actions{display:flex;gap:10px;}
+  .btn{flex:1;border-radius:11px;padding:13px;font-size:15px;font-weight:700;cursor:pointer;border:none;display:flex;align-items:center;justify-content:center;gap:7px;}
+  .btn svg{width:18px;height:18px;}
+  .btn-primary{background:var(--primary);color:#fff;}
+  .btn-primary:active{background:var(--primary-dark);}
+  .btn-ghost{background:#fff;color:var(--primary);border:1.5px solid var(--primary);}
+  .print-tip{margin:14px 0 0;font-size:12px;color:var(--ink-2);background:#f7f9fc;border-radius:8px;padding:9px 11px;text-align:left;}
+  .saved-path{margin:11px 0 0;font-size:11.5px;line-height:1.5;color:#9aa6b8;word-break:break-all;text-align:center;}
+  .saved-path b{font-weight:500;color:#8d9bad;}
+
+  /* sticky action bar */
+  .action-bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:10px 14px calc(10px + env(safe-area-inset-bottom));z-index:20;}
+  .action-bar .ab-inner{max-width:680px;margin:0 auto;display:flex;gap:10px;}
+  .action-bar .btn{width:100%;}
+  .ab-prog{display:none;flex-direction:column;gap:6px;}
+  .ab-prog .pbar{height:8px;}
+  .ab-prog .prog-t{margin:0;}
+
+  footer{text-align:center;font-size:11.5px;color:var(--ink-2);padding:6px 0 2px;}
+
+  [hidden]{display:none !important;}
+  .spin{width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:rot .7s linear infinite;}
+  @keyframes rot{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="inner">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <path d="M14 2v6h6"/>
+        <line x1="12" y1="11" x2="12" y2="21"/>
+        <line x1="9" y1="16" x2="15" y2="16"/>
+      </svg>
+    </div>
+    <div>
+      <h1>试卷切分助手</h1>
+      <p>A3 / A4 拼版试卷 → 单页 A4，直接打印</p>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <main>
+    <!-- 步骤1：上传 -->
+    <section class="card" id="card-upload">
+      <div class="dropzone" id="dropzone" role="button" aria-label="选择PDF文件">
+        <div class="dz-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </div>
+        <div class="dz-t">点击选择试卷 PDF</div>
+        <div class="dz-s">支持一页含 2 栏 / 3 栏的拼版试卷，自动识别切分</div>
+      </div>
+      <input type="file" id="file-input" accept="application/pdf,.pdf" hidden>
+    </section>
+
+    <!-- 文件信息 -->
+    <section class="card file-info" id="card-file" hidden>
+      <div class="fi-ico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <path d="M14 2v6h6"/>
+        </svg>
+      </div>
+      <div class="fi-meta">
+        <div class="fi-name" id="fi-name">file.pdf</div>
+        <div class="fi-sub" id="fi-sub"></div>
+      </div>
+      <button class="link-btn" id="btn-repick">更换文件</button>
+    </section>
+
+    <!-- 设置 -->
+    <section class="card" id="card-config" hidden>
+      <h3>分栏方式</h3>
+      <div class="seg" id="seg-mode">
+        <button data-mode="auto" class="active">自动识别<span class="seg-sub">按页面比例判断</span></button>
+        <button data-mode="2">左右 2 栏<span class="seg-sub">一页切成两页</span></button>
+        <button data-mode="3">左中右 3 栏<span class="seg-sub">一页切成三页</span></button>
+        <button data-mode="1">不切分<span class="seg-sub">仅转 A4 版式</span></button>
+      </div>
+      <div class="field">
+        <label>页边距 <span><b id="margin-val">4</b> mm</span></label>
+        <input type="range" id="margin-range" min="0" max="10" value="4">
+        <div class="muted" style="margin-top:2px;">切出的图片四周到 A4 纸边的留白，设 0 即尽量铺满整页</div>
+      </div>
+      <div class="field">
+        <label>切分线微调 <span><b id="shift-val">0</b>%</span></label>
+        <input type="range" id="shift-range" min="-15" max="15" value="0">
+        <div class="muted" style="margin-top:2px;">扫描有偏移时，可整体左右移动切分线（相对栏宽）</div>
+      </div>
+      <label class="chk">
+        <input type="checkbox" id="trim-chk" checked>
+        <span>裁掉页面四周白边<span class="chk-sub">按每栏实际有字范围裁剪，放大后更铺满 A4</span></span>
+      </label>
+    </section>
+
+    <!-- 预览 -->
+    <section class="card" id="card-preview" hidden>
+      <div class="pv-head">
+        <h3>切分预览</h3>
+        <span class="badge" id="out-badge">将生成 0 页</span>
+      </div>
+      <div class="pv-grid" id="pv-grid"></div>
+    </section>
+
+    <!-- 进度 -->
+    <section class="card" id="card-progress" hidden>
+      <div class="prog">
+        <div class="pbar"><div class="pbar-fill" id="p-fill"></div></div>
+        <div class="prog-t" id="p-text">正在处理…</div>
+      </div>
+    </section>
+
+    <!-- 结果 -->
+    <section class="card result" id="card-result" hidden>
+      <div class="r-ico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+          <polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+      </div>
+      <h3>切分完成</h3>
+      <div class="r-sub" id="r-sub"></div>
+      <div class="r-actions">
+        <button class="btn btn-primary" id="btn-download">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg><span id="dl-label">下载 PDF</span>
+        </button>
+        <button class="btn btn-ghost" id="btn-share">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+          </svg>分享
+        </button>
+      </div>
+      <button class="btn btn-ghost" id="btn-open" style="width:100%;margin-top:10px" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+          <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+        </svg>查看文件
+      </button>
+      <p class="saved-path" id="saved-path" hidden>已保存 · <b id="saved-path-t"></b></p>
+      <div class="print-tip">打印提示：在打印对话框中选择纸张为 A4，缩放选“适应页面 / 实际大小”，即可每页铺满一张 A4 纸。</div>
+    </section>
+
+    <footer>全部处理在本机浏览器完成，试卷不会上传服务器，请放心使用</footer>
+  </main>
+</div>
+
+<!-- 底部固定操作栏 -->
+<div class="action-bar" id="action-bar" hidden>
+  <div class="ab-inner">
+    <button class="btn btn-ghost" id="btn-repick2">更换文件</button>
+    <button class="btn btn-primary" id="btn-process">开始切分</button>
+  </div>
+</div>
+
+<script src="lib/pdf.min.js"></script>
+<script src="lib/pdf-lib.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

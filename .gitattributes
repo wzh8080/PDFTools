@@ -1,0 +1,34 @@
+# 统一使用 Linux 换行符（LF），避免 Windows 与 Linux 间切换时产生整文件差异
+* text=auto eol=lf
+
+# 二进制文件：不做换行转换，也不当文本 diff
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.jar binary
+*.apk binary
+*.keystore binary
+*.jks binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+
+# 常见文本类型显式声明，避免被误判为二进制
+*.md text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.json text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.svg text eol=lf
+*.xml text eol=lf
+*.py text eol=lf
+*.kt text eol=lf
+*.kts text eol=lf
+*.gradle text eol=lf
+*.properties text eol=lf
+*.bat text eol=crlf

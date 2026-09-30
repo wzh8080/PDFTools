@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#2563eb"/>
+  <rect x="86" y="131" width="340" height="250" rx="20" fill="#ffffff"/>
+  <g stroke="#b9c4d6" stroke-width="12" stroke-linecap="round">
+    <line x1="116" y1="165" x2="232" y2="165"/>
+    <line x1="116" y1="195" x2="232" y2="195"/>
+    <line x1="116" y1="225" x2="232" y2="225"/>
+    <line x1="116" y1="255" x2="232" y2="255"/>
+    <line x1="116" y1="285" x2="232" y2="285"/>
+    <line x1="116" y1="315" x2="232" y2="315"/>
+    <line x1="116" y1="345" x2="232" y2="345"/>
+    <line x1="280" y1="165" x2="396" y2="165"/>
+    <line x1="280" y1="195" x2="396" y2="195"/>
+    <line x1="280" y1="225" x2="396" y2="225"/>
+    <line x1="280" y1="255" x2="396" y2="255"/>
+    <line x1="280" y1="285" x2="396" y2="285"/>
+    <line x1="280" y1="315" x2="396" y2="315"/>
+    <line x1="280" y1="345" x2="396" y2="345"/>
+  </g>
+  <line x1="256" y1="150" x2="256" y2="346" stroke="#ef4444" stroke-width="9" stroke-dasharray="16 14" stroke-linecap="round"/>
+</svg>

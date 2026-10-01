@@ -508,6 +508,23 @@
     if (!cardPreview.hidden) updateOverlays();
     resetResult();
   });
+
+  // 边距/微调 步进按钮：点一次 ±1 单位（与拖动滑块走同一 input 事件，状态/预览同步）
+  document.querySelectorAll('.step').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var r = document.getElementById(btn.getAttribute('data-target'));
+      if (!r) return;
+      var unit = parseFloat(r.getAttribute('step') || '1');
+      var dir = parseInt(btn.getAttribute('data-step'), 10) || 0;
+      var v = parseFloat(r.value) + unit * dir;
+      v = Math.max(parseFloat(r.min), Math.min(parseFloat(r.max), v));
+      v = Math.round(v * 100) / 100;
+      if (String(v) !== String(r.value)) {
+        r.value = v;
+        r.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+  });
   // 白边裁剪默认关；用户选过一次就记住（file:// 或隐私模式下 localStorage 会抛，忽略即可）
   var TRIM_KEY = 'pdfsplitter.trimWhite';
   try { state.trim = localStorage.getItem(TRIM_KEY) === '1'; } catch (e) {}

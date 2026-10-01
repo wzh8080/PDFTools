@@ -192,11 +192,23 @@
   function detectAllCols() {
     if (!state.pdf) return Promise.resolve();
     state.cuts = [];
-    var jobs = [];
-    for (var i = 0; i < state.sizes.length; i++) {
-      (function (idx) { jobs.push(analyzeCuts(idx).then(function (c) { state.cuts[idx] = c; })); })(i);
+    var jobs = [], done = 0, total = state.sizes.length, btnP = $('btn-process');
+    setProgress(2, '正在识别 0 / ' + total + ' 页…');
+    if (btnP) btnP.disabled = true;          // 识别期间不让点切分，否则会把还没测完的页当 1 栏切掉
+    for (var i = 0; i < total; i++) {
+      (function (idx) {
+        jobs.push(analyzeCuts(idx).then(function (c) {
+          state.cuts[idx] = c;
+          done++;
+          setProgress(2 + Math.round(done / total * 98), '正在识别 ' + done + ' / ' + total + ' 页…');
+        }));
+      })(i);
     }
-    return Promise.all(jobs).then(function () { updateOverlays(); });
+    return Promise.all(jobs).then(function () {
+      clearProgress();
+      if (btnP) btnP.disabled = false;
+      updateOverlays();
+    });
   }
   // 固定栏数：把所有页铺成等分
   function applyEqualCuts(n) { state.cuts = []; for (var i = 0; i < state.sizes.length; i++) state.cuts[i] = equalCuts(n); }

@@ -51,6 +51,10 @@ Gradle 走 `JAVA_HOME`。PATH 上若另有 `java`（常见是 JDK 8）不影响 
     ./gradlew --version          # 先只触发 wrapper 解包，确认 Gradle 9.7.1 落地
     ./gradlew :app:assembleDebug # 先出 debug 包：不需签名，验证 SDK36 + AGP9 链路
     ./gradlew :app:assembleRelease
+    apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
+
+最后一条不是可选项：必须看到证书 DN 与 SHA-256 指纹且**非 debug key**，才算 release 可用。
+`BUILD SUCCESSFUL` 只证明编译通过，不证明签名生效（见第 4 项）。
 
 `android/app/src/main/assets/www/` 是空的不用手补 —— `preBuild` 依赖的 `syncWebAssets`
 会自动从 `pdf-splitter/` 同步。debug 包可用 Chrome `chrome://inspect` 调 WebView。

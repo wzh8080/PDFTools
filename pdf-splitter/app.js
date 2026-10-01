@@ -79,43 +79,64 @@
     if (s >= 0) runs.push({ start: s, end: w - 1 });
     return runs;
   }
-  // 从位图算分割线：①优先找竖线(含断续但贯穿上下的分隔线) ②没竖线按空白沟 ③窄边条并入相邻栏
+  // 从位图算分割线：竖线与空白沟两路证据各算一遍再合并，位置以竖线为准
   function detectCutsFromCanvas(ctx, w, h) {
     var data = ctx.getImageData(0, 0, w, h).data;
     var colInk = new Int32Array(w), x, y;
     for (x = 0; x < w; x++) { var c = 0; for (y = 0; y < h; y++) { var p = (y * w + x) * 4; if (data[p] < 200 || data[p + 1] < 200 || data[p + 2] < 200) c++; } colInk[x] = c; }
-    var cuts = null;
-    // ① 竖线：某列纵向墨迹占比高且很窄
-    var lineT = Math.round(h * 0.45), isLine = new Uint8Array(w);
+    // ① 竖线：贯穿整页且很窄。0.75 是实测分界——真印刷分隔线纵向覆盖率接近 1，
+    // 而左对齐正文的首字符列（每行同一起点）只有约 0.5，旧值 0.45 会把它误认成分隔线。
+    var lineT = Math.round(h * 0.75), isLine = new Uint8Array(w);
     for (x = 0; x < w; x++) isLine[x] = colInk[x] >= lineT ? 1 : 0;
     var lineCuts = [];
     groupRuns(isLine, w).forEach(function (r) {
       var wd = r.end - r.start + 1, ctr = (r.start + r.end) / 2 / w;
       if (wd <= Math.max(3, Math.round(w * 0.03)) && ctr > 0.12 && ctr < 0.88) lineCuts.push(ctr);
     });
-    if (lineCuts.length >= 1) { cuts = lineCuts; }
-    else {
-      // ② 空白沟分栏
-      var inkT = Math.max(2, Math.round(h * 0.012)), hasInk = new Uint8Array(w);
-      for (x = 0; x < w; x++) hasInk[x] = colInk[x] > inkT ? 1 : 0;
-      var minGap = Math.max(4, Math.round(w * 0.02)), merged = [];
-      groupRuns(hasInk, w).forEach(function (b) {
-        if (merged.length && b.start - merged[merged.length - 1].end < minGap) merged[merged.length - 1].end = b.end;
-        else merged.push({ start: b.start, end: b.end });
-      });
-      merged = merged.filter(function (b) { return (b.end - b.start) >= w * 0.03; });
-      if (merged.length >= 2) {
-        cuts = [];
-        for (var k = 1; k < merged.length; k++) cuts.push((merged[k - 1].end + merged[k].start) / 2 / w);
-        // ③ 窄边条并入相邻栏（首/尾太窄则去掉那个切点）
-        var total = merged[merged.length - 1].end - merged[0].start;
-        if (cuts.length && (merged[0].end - merged[0].start) < total * 0.16) cuts.shift();
-        if (cuts.length && (merged[merged.length - 1].end - merged[merged.length - 1].start) < total * 0.16) cuts.pop();
-      } else { cuts = []; }
+    // ② 空白沟分栏：栏数由内容块决定，所以即使已经找到竖线也必须算，否则会漏掉没有印线的边界
+    var bandCuts = [];
+    var inkT = Math.max(2, Math.round(h * 0.012)), hasInk = new Uint8Array(w);
+    for (x = 0; x < w; x++) hasInk[x] = colInk[x] > inkT ? 1 : 0;
+    var minGap = Math.max(4, Math.round(w * 0.02)), merged = [];
+    groupRuns(hasInk, w).forEach(function (b) {
+      if (merged.length && b.start - merged[merged.length - 1].end < minGap) merged[merged.length - 1].end = b.end;
+      else merged.push({ start: b.start, end: b.end });
+    });
+    merged = merged.filter(function (b) { return (b.end - b.start) >= w * 0.03; });
+    if (merged.length >= 2) {
+      for (var k = 1; k < merged.length; k++) {
+        var a = merged[k - 1].end / w, b = merged[k].start / w, mid = (a + b) / 2;
+        // 沟里（含压着带边的情况，所以左右各放 1.5% 容差）若印有分隔线，切点取线的位置
+        var snapTo = null;
+        for (var q = 0; q < lineCuts.length; q++) {
+          var lv = lineCuts[q];
+          if (lv >= a - 0.015 && lv <= b + 0.015 &&
+              (snapTo === null || Math.abs(lv - mid) < Math.abs(snapTo - mid))) snapTo = lv;
+        }
+        bandCuts.push(snapTo === null ? mid : snapTo);
+      }
+      // 窄边条并入相邻栏（首/尾太窄则去掉那个切点）
+      var total = merged[merged.length - 1].end - merged[0].start;
+      if (bandCuts.length && (merged[0].end - merged[0].start) < total * 0.16) bandCuts.shift();
+      if (bandCuts.length && (merged[merged.length - 1].end - merged[merged.length - 1].start) < total * 0.16) bandCuts.pop();
     }
-    cuts.sort(function (a, b) { return a - b; });
-    if (cuts.length > 2) cuts = cuts.slice(0, 2);   // 最多 3 栏
-    return cuts;
+    // ③ 合并：相距 3% 页宽以内算同一条，且采信竖线的位置（比沟中心准）
+    var cand = [];
+    lineCuts.forEach(function (v) { cand.push({ v: v, line: true }); });
+    bandCuts.forEach(function (v) { cand.push({ v: v, line: false }); });
+    cand.sort(function (a, b) { return a.v - b.v || (b.line - a.line); });
+    var picks = [];
+    for (var m = 0; m < cand.length; m++) {
+      var last = picks.length - 1;
+      if (last >= 0 && Math.abs(cand[m].v - picks[last].v) < 0.03) {
+        if (cand[m].line && !picks[last].line) picks[last] = cand[m];
+        continue;
+      }
+      picks.push(cand[m]);
+    }
+    // 候选多于两条时取相距最远的那两条（旧实现按位置取最左两条，会把右侧真线挤掉）
+    if (picks.length > 2) picks = [picks[0], picks[picks.length - 1]];
+    return picks.map(function (p) { return p.v; });
   }
   function analyzeCuts(pno) {
     function fallback() { var s = state.sizes[pno]; return s ? equalCuts(detectCols(s.W, s.H)) : []; }
@@ -432,6 +453,10 @@
               '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
                 '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>' +
             '</button>' +
+            '<button type="button" class="pv-add" data-page="' + idx + '" title="在此页新增一条分割线" aria-label="在此页新增一条分割线">' +
+              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">' +
+                '<path d="M12 5v14M5 12h14"/></svg>' +
+            '</button>' +
           '</div>' +
           '<div class="pv-foot"></div>';
         pvGrid.appendChild(item);
@@ -496,7 +521,12 @@
       for (var k = 1; k < n; k++) {
         var pct = clamp(bands[k].left / s.W * 100, 1.5, 98.5);
         html += '<div class="cut-line cut-handle" data-page="' + i + '" data-k="' + k + '" style="left:' + pct.toFixed(2) + '%">' +
-                '<span class="cut-lbl">' + k + '</span><span class="cut-grip"></span></div>';
+                '<span class="cut-lbl">' + k + '</span>' +
+                '<span class="cut-del" data-page="' + i + '" data-k="' + k + '" role="button" title="删除这条分割线" aria-label="删除第 ' + k + ' 条分割线">' +
+                  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                    '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>' +
+                    '<path d="M10 11v5M14 11v5"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>' +
+                '</span><span class="cut-grip"></span></div>';
       }
       layer.className = 'cut-layer';
       layer.style.position = 'absolute';
@@ -517,6 +547,7 @@
   pvGrid.addEventListener('pointerdown', function (e) {
     var h = e.target.closest('.cut-handle');
     if (!h || state.busy) return;
+    if (e.target.closest('.cut-del')) return;   // 下端删除图标是点击，不该触发拖动
     var item = h.closest('.pv-item');
     var i = parseInt(item.getAttribute('data-idx'), 10);
     var k = parseInt(h.getAttribute('data-k'), 10);   // 1-based 内部边界
@@ -539,6 +570,43 @@
   });
   window.addEventListener('pointerup', function () { if (dragCtx) { dragCtx = null; resetResult(); } });
   window.addEventListener('pointercancel', function () { dragCtx = null; });
+
+  // ---- 删除 / 新增分割线（都只作用于该页，栏数与编号随即重排）----
+  function materializeCuts(i) {
+    if (!state.cuts[i]) state.cuts[i] = cutsFor(i).slice();
+    return state.cuts[i];
+  }
+  function delCut(i, k) {
+    var cuts = materializeCuts(i);
+    if (k < 1 || k > cuts.length) return;
+    cuts.splice(k - 1, 1);
+    updateOverlays();
+    resetResult();
+  }
+  // 加号落在当前最宽那一栏的正中；最宽处都不足 12% 页宽时不再细分，避免切出几乎零宽的废页
+  function addCut(i) {
+    var cuts = materializeCuts(i);
+    var bounds = [0], kk;
+    for (kk = 0; kk < cuts.length; kk++) bounds.push(cuts[kk]);
+    bounds.push(1);
+    var bestK = -1, bestW = 0;
+    for (kk = 1; kk < bounds.length; kk++) {
+      var wd = bounds[kk] - bounds[kk - 1];
+      if (wd > bestW) { bestW = wd; bestK = kk; }
+    }
+    if (bestK < 1 || bestW < 0.12) return;
+    cuts.push((bounds[bestK - 1] + bounds[bestK]) / 2);
+    cuts.sort(function (a, b) { return a - b; });
+    updateOverlays();
+    resetResult();
+  }
+  pvGrid.addEventListener('click', function (e) {
+    if (state.busy) return;
+    var del = e.target.closest('.cut-del');
+    if (del) { delCut(parseInt(del.getAttribute('data-page'), 10), parseInt(del.getAttribute('data-k'), 10)); return; }
+    var add = e.target.closest('.pv-add');
+    if (add) addCut(parseInt(add.getAttribute('data-page'), 10));
+  });
 
   // ---- 设置交互 ----
   function setMode(m) {

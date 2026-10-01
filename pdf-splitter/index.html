@@ -72,6 +72,7 @@
   .seg button .seg-sub{display:block;font-size:11px;font-weight:400;color:var(--ink-2);margin-top:2px;}
   .seg button.active{border-color:var(--primary);background:var(--primary-soft);color:var(--primary);}
   .seg button.active .seg-sub{color:var(--primary);}
+  .seg .seg-wide{grid-column:1 / -1;}
 
   .field{margin-top:16px;}
   .field label{display:flex;justify-content:space-between;font-size:13.5px;font-weight:600;margin-bottom:6px;}
@@ -181,7 +182,7 @@
           </svg>
         </div>
         <div class="dz-t">点击选择试卷 PDF</div>
-        <div class="dz-s">支持一页含 2 栏 / 3 栏的拼版试卷，自动识别切分</div>
+        <div class="dz-s">支持一页含 2 栏 / 3 栏的拼版试卷，可手动选栏或用智能识别</div>
       </div>
       <input type="file" id="file-input" accept="application/pdf,.pdf" hidden>
     </section>
@@ -205,10 +206,9 @@
     <section class="card" id="card-config" hidden>
       <h3>分栏方式</h3>
       <div class="seg" id="seg-mode">
-        <button data-mode="auto" class="active">自动识别<span class="seg-sub">按页面比例判断</span></button>
-        <button data-mode="2">左右 2 栏<span class="seg-sub">一页切成两页</span></button>
-        <button data-mode="3">左中右 3 栏<span class="seg-sub">一页切成三页</span></button>
-        <button data-mode="1">不切分<span class="seg-sub">仅转 A4 版式</span></button>
+        <button data-mode="2" class="active">左右 2 栏<span class="seg-sub">一页切成两页</span></button>
+        <button data-mode="3">左右 3 栏<span class="seg-sub">一页切成三页</span></button>
+        <button data-mode="auto" class="seg-wide">智能识别<span class="seg-sub">按内容空白自动判断每页栏数</span></button>
       </div>
       <div class="field row">
         <label for="margin-x-range">左右边距 <b id="margin-x-val">10</b><i>mm</i></label>

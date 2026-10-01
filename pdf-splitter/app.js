@@ -17,7 +17,8 @@
     pdf: null,           // pdf.js 文档
     sizes: [],           // 每页 {W,H}（归一化 + 用户手动旋转后的实际显示尺寸）
     userRot: [],         // 每页用户在预览里手动追加的旋转角度 0/90/180/270
-    mode: 'auto',
+    cols: [],            // 智能识别模式下每页检测到的栏数（仅点「智能识别」时才计算）
+    mode: '2',           // 默认「左右 2 栏」；取值 '2' / '3' / 'auto'(智能识别)
     marginX: 10,         // 左右边距 mm，滑块 0–20
     marginY: 20,         // 上下边距 mm，滑块 0–40（决定放大率）
     shift: 0,
@@ -43,15 +44,69 @@
     if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
     return (b / 1048576).toFixed(2) + ' MB';
   }
+  // 某页栏数：智能识别用内容检测结果，否则用手动指定的固定栏数
+  function colCount(i) {
+    if (state.mode === 'auto') return state.cols[i] || 1;
+    return parseInt(state.mode, 10);
+  }
+
+  // 比例兑底（仅内容渲染失败时用）：栏数是内容属性，同尺寸的 2/3 栏比值相同，
+  // 所以自动不能只靠宽高比，必须看内容（下方 countInkBands）。
   function detectCols(W, H) {
     var r = W / H;
     if (r >= 1.85) return 3;
     if (r >= 1.2) return 2;
     return 1;
   }
-  function colsFor(W, H) {
-    if (state.mode === 'auto') return detectCols(W, H);
-    return parseInt(state.mode, 10);
+  // 把页面渲染成低分辨率位图，做纵向墨迹投影，数被空白沟隔开的“有墨区段”个数 = 栏数
+  function countInkBands(ctx, w, h) {
+    var data = ctx.getImageData(0, 0, w, h).data;
+    var colHas = new Uint8Array(w);
+    for (var x = 0; x < w; x++) {
+      var ink = 0;
+      for (var y = 0; y < h; y++) {
+        var p = (y * w + x) * 4;
+        if (data[p] < 200 || data[p + 1] < 200 || data[p + 2] < 200) { ink++; if (ink > 2) break; }
+      }
+      colHas[x] = ink > 2 ? 1 : 0;
+    }
+    var minGap = Math.max(6, Math.round(w * 0.03));   // 栏间空白沟至少 3% 宽
+    var bands = 0, inBand = false, gap = 0;
+    for (var x2 = 0; x2 < w; x2++) {
+      if (colHas[x2]) { if (!inBand) { inBand = true; bands++; } gap = 0; }
+      else if (inBand) { gap++; if (gap >= minGap) { inBand = false; gap = 0; } }
+    }
+    return Math.max(1, Math.min(3, bands));
+  }
+  function analyzeCols(pno) {
+    return state.pdf.getPage(pno + 1).then(function (page) {
+      var base = page.getViewport({ scale: 1 });
+      var scale = Math.min(1, 420 / base.width);
+      var vp = page.getViewport({ scale: scale });
+      var canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.ceil(vp.width));
+      canvas.height = Math.max(1, Math.ceil(vp.height));
+      var ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      return page.render({ canvasContext: ctx, viewport: vp }).promise.then(function () {
+        var n = countInkBands(ctx, canvas.width, canvas.height);
+        canvas.width = canvas.height = 0;
+        return n;
+      }, function () {
+        canvas.width = canvas.height = 0;
+        var s = state.sizes[pno]; return s ? detectCols(s.W, s.H) : 1;   // 渲染失败回退到比例启发
+      });
+    });
+  }
+  // 智能识别：逐页内容检测，结果存 state.cols，再刷新切分线
+  function detectAllCols() {
+    if (!state.pdf) return Promise.resolve();
+    state.cols = [];
+    var jobs = [];
+    for (var i = 0; i < state.sizes.length; i++) {
+      (function (idx) { jobs.push(analyzeCols(idx).then(function (n) { state.cols[idx] = n; })); })(i);
+    }
+    return Promise.all(jobs).then(function () { updateOverlays(); });
   }
   function tick() { return new Promise(function (r) { setTimeout(r, 0); }); }
 
@@ -283,7 +338,10 @@
         state.bytes = norm || ab2bytes(state.ab);
         return openPdf();
       })
-      .then(function () { buildPreview(); });
+      .then(function () {
+        buildPreview();
+        if (state.mode === 'auto') detectAllCols();   // 旋转后内容朝向变了，智能识别需重算
+      });
   }
 
   function openPdf() {
@@ -391,7 +449,7 @@
     var nodes = pvGrid.querySelectorAll('.pv-item');
     for (var i = 0; i < nodes.length; i++) {
       var s = state.sizes[i];
-      var n = colsFor(s.W, s.H);
+      var n = colCount(i);
       var cw = s.W / n;
       var shiftPx = state.shift / 100 * cw;
       var layer = nodes[i].querySelector('.cut-layer');
@@ -424,8 +482,10 @@
     state.mode = btn.getAttribute('data-mode');
     var all = $('seg-mode').querySelectorAll('button');
     all.forEach(function (b) { b.classList.toggle('active', b === btn); });
-    if (!cardPreview.hidden) updateOverlays();
     resetResult();
+    if (cardPreview.hidden) return;
+    if (state.mode === 'auto') { detectAllCols(); }   // 智能识别：按内容检测每页栏数
+    else { updateOverlays(); }
   });
   $('margin-x-range').addEventListener('input', function () {
     state.marginX = parseInt(this.value, 10);
@@ -484,7 +544,7 @@
       for (var pno = 0; pno < srcPages.length; pno++) {
         var sz = srcPages[pno].getSize();
         var W = sz.width, H = sz.height;
-        var n = colsFor(W, H);
+        var n = colCount(pno);
         var cw = W / n;
         var shiftPx = state.shift / 100 * cw;
         var bands = [];
@@ -543,7 +603,7 @@
 
       var t = 0;
       for (var j = 0; j < state.sizes.length; j++) {
-        t += colsFor(state.sizes[j].W, state.sizes[j].H);
+        t += colCount(j);
       }
       $('r-sub').textContent = '共 ' + t + ' 页 · A4 纵向 · ' + fmtSize(bytes.length);
       cardResult.hidden = false;

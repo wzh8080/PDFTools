@@ -46,6 +46,7 @@
   }
   // ---- 分割线模型：每页一组内部边界占页宽比例（不含全局 shift）----
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  var MAX_CUTS = 2;   // 每页最多两条内部边界，即最多 3 栏
   function equalCuts(n) { var a = []; for (var k = 1; k < n; k++) a.push(k / n); return a; }
   // 取某页当前边界；未设置时按当前模式给默认（auto 未检测前暂按 2 栏）
   function cutsFor(i) {
@@ -122,20 +123,26 @@
     }
     // ③ 合并：相距 3% 页宽以内算同一条，且采信竖线的位置（比沟中心准）
     var cand = [];
-    lineCuts.forEach(function (v) { cand.push({ v: v, line: true }); });
-    bandCuts.forEach(function (v) { cand.push({ v: v, line: false }); });
+    lineCuts.forEach(function (v) { cand.push({ v: v, line: true, band: false }); });
+    bandCuts.forEach(function (v) { cand.push({ v: v, line: false, band: true }); });
     cand.sort(function (a, b) { return a.v - b.v || (b.line - a.line); });
     var picks = [];
     for (var m = 0; m < cand.length; m++) {
       var last = picks.length - 1;
       if (last >= 0 && Math.abs(cand[m].v - picks[last].v) < 0.03) {
-        if (cand[m].line && !picks[last].line) picks[last] = cand[m];
+        if (cand[m].band) picks[last].band = true;   // 这一处有内容块证据，即使位置由竖线代表
+        if (cand[m].line && !picks[last].line) { cand[m].band = cand[m].band || picks[last].band; picks[last] = cand[m]; }
         continue;
       }
       picks.push(cand[m]);
     }
-    // 候选多于两条时取相距最远的那两条（旧实现按位置取最左两条，会把右侧真线挤掉）
-    if (picks.length > 2) picks = [picks[0], picks[picks.length - 1]];
+    // 最多 3 栏（两条线）。候选超出时优先保留内容块给出的那两条：
+    // 装订线/表格竖边框一类的假线不该把中间的真边界挤掉（取首尾会丢中线）
+    if (picks.length > 2) {
+      var byBand = picks.filter(function (p) { return p.band; });
+      if (byBand.length >= 2) picks = [byBand[0], byBand[byBand.length - 1]];
+      else picks = [picks[0], picks[picks.length - 1]];
+    }
     return picks.map(function (p) { return p.v; });
   }
   function analyzeCuts(pno) {
@@ -510,7 +517,7 @@
 
   // 更新切分线（可拖把手）/ 标签 / 输出页数（不重渲染 canvas）
   function updateOverlays() {
-    var total = 0;
+    var total = 0, mismatch = false;
     var nodes = pvGrid.querySelectorAll('.pv-item');
     for (var i = 0; i < nodes.length; i++) {
       var s = state.sizes[i];
@@ -522,11 +529,11 @@
         var pct = clamp(bands[k].left / s.W * 100, 1.5, 98.5);
         html += '<div class="cut-line cut-handle" data-page="' + i + '" data-k="' + k + '" style="left:' + pct.toFixed(2) + '%">' +
                 '<span class="cut-lbl">' + k + '</span>' +
-                '<span class="cut-del" data-page="' + i + '" data-k="' + k + '" role="button" title="删除这条分割线" aria-label="删除第 ' + k + ' 条分割线">' +
+                '<button type="button" class="cut-del" data-page="' + i + '" data-k="' + k + '" title="删除这条分割线" aria-label="删除第 ' + k + ' 条分割线">' +
                   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
                     '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>' +
                     '<path d="M10 11v5M14 11v5"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>' +
-                '</span><span class="cut-grip"></span></div>';
+                '</button><span class="cut-grip"></span></div>';
       }
       layer.className = 'cut-layer';
       layer.style.position = 'absolute';
@@ -536,9 +543,18 @@
       var foot = nodes[i].querySelector('.pv-foot');
       foot.innerHTML = '<span>原第 <b>' + (i + 1) + '</b> 页</span>' +
                        '<span>' + (n === 1 ? '保持 1 页' : '切出 <b>' + n + '</b> 页') + '</span>';
+      var addBtn = nodes[i].querySelector('.pv-add');
+      if (addBtn) addBtn.disabled = (n - 1 >= MAX_CUTS);   // 满 3 栏就点不动，避免无上限细分
+      if ((state.mode === '2' || state.mode === '3') && n !== parseInt(state.mode, 10)) mismatch = true;
       total += n;
     }
     $('out-badge').textContent = '将生成 ' + total + ' 页';
+    // 手动删/加之后，若实际栏数与高亮的那个固定按钮不符就撤掉高亮，别骗人
+    if (state.mode === '2' || state.mode === '3') {
+      $('seg-mode').querySelectorAll('button').forEach(function (b) {
+        b.classList.toggle('active', !mismatch && b.getAttribute('data-mode') === state.mode);
+      });
+    }
     return total;
   }
 
@@ -569,7 +585,8 @@
     updateOverlays();
   });
   window.addEventListener('pointerup', function () { if (dragCtx) { dragCtx = null; resetResult(); } });
-  window.addEventListener('pointercancel', function () { dragCtx = null; });
+  // 手势被系统打断时没有 pointerup，但 pointermove 已经改过 cuts，同样要作废旧结果
+  window.addEventListener('pointercancel', function () { if (dragCtx) { dragCtx = null; resetResult(); } });
 
   // ---- 删除 / 新增分割线（都只作用于该页，栏数与编号随即重排）----
   function materializeCuts(i) {
@@ -577,15 +594,18 @@
     return state.cuts[i];
   }
   function delCut(i, k) {
+    if (!(i >= 0)) return;
     var cuts = materializeCuts(i);
-    if (k < 1 || k > cuts.length) return;
+    if (!(k >= 1 && k <= cuts.length)) return;
     cuts.splice(k - 1, 1);
     updateOverlays();
     resetResult();
   }
-  // 加号落在当前最宽那一栏的正中；最宽处都不足 12% 页宽时不再细分，避免切出几乎零宽的废页
+  // 加号落在当前最宽那一栏的正中；满 3 栏不再细分，最宽处不足 12% 页宽时也不分，避免切出废页
   function addCut(i) {
+    if (!(i >= 0)) return;
     var cuts = materializeCuts(i);
+    if (cuts.length >= MAX_CUTS) return;
     var bounds = [0], kk;
     for (kk = 0; kk < cuts.length; kk++) bounds.push(cuts[kk]);
     bounds.push(1);

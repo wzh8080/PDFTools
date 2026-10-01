@@ -100,12 +100,12 @@
   .pv-item{border:1px solid var(--line);border-radius:10px;overflow:hidden;}
   .pv-wrap{position:relative;width:100%;background:#f3f5f9;}
   .pv-wrap canvas{display:block;width:100%;height:auto;}
-  .cut-line{position:absolute;top:0;bottom:0;width:0;border-left:2px dashed var(--cut);transform:translateX(-1px);pointer-events:none;}
+  .cut-line{position:absolute;top:0;bottom:0;width:0;border-left:2px dashed var(--cut);margin-left:-1px;pointer-events:none;}
   .cut-lbl{position:absolute;top:3px;transform:translateX(-50%);background:var(--cut);color:#fff;font-size:10px;line-height:1;padding:2px 5px;border-radius:4px;white-space:nowrap;}
   .cut-handle{pointer-events:auto;cursor:ew-resize;touch-action:none;}
   .cut-grip{position:absolute;top:50%;left:0;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;background:var(--cut);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);}
   /* 线下端删除按钮，尺寸与上端编号标签相当 */
-  .cut-del{position:absolute;bottom:3px;left:0;transform:translateX(-50%);display:flex;align-items:center;justify-content:center;width:17px;height:15px;border-radius:4px;background:#fff;border:1.5px solid var(--cut);color:var(--cut);cursor:pointer;pointer-events:auto;touch-action:auto;}
+  .cut-del{position:absolute;bottom:3px;left:0;transform:translateX(-50%);display:flex;align-items:center;justify-content:center;width:17px;height:15px;padding:0;border-radius:4px;background:#fff;border:1.5px solid var(--cut);color:var(--cut);cursor:pointer;pointer-events:auto;touch-action:auto;z-index:4;}
   .cut-del svg{width:10px;height:10px;}
   /* 视觉尺寸跟编号标签对齐，但手指可点的范围向外扩 6px */
   .cut-del::after{content:'';position:absolute;inset:-6px;}
@@ -121,6 +121,7 @@
   .pv-add{position:absolute;bottom:6px;right:6px;width:28px;height:28px;border-radius:9px;border:1px solid var(--line);background:rgba(255,255,255,.94);color:var(--cut);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:var(--shadow);pointer-events:auto;z-index:3;padding:0;}
   .pv-add svg{width:15px;height:15px;}
   .pv-add:active{background:#feecec;border-color:var(--cut);}
+  .pv-add:disabled{opacity:.35;cursor:default;}
   .rot-all{display:flex;gap:8px;margin:0 0 12px;}
   .rot-all button{flex:1;border:1.5px solid var(--line);background:#fff;border-radius:9px;padding:8px 6px;font-size:13px;font-weight:600;color:var(--primary);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;}
   .rot-all button:active{background:var(--primary-soft);}

@@ -15,7 +15,8 @@
     ab: null,            // 原始 ArrayBuffer
     bytes: null,         // 旋转归一化后的字节；预览与输出共用同一份，坐标系才一致
     pdf: null,           // pdf.js 文档
-    sizes: [],           // 每页 {W,H}
+    sizes: [],           // 每页 {W,H}（归一化 + 用户手动旋转后的实际显示尺寸）
+    userRot: [],         // 每页用户在预览里手动追加的旋转角度 0/90/180/270
     mode: 'auto',
     marginX: 10,         // 左右边距 mm，滑块 0–20
     marginY: 20,         // 上下边距 mm，滑块 0–40（决定放大率）
@@ -80,18 +81,28 @@
     return deg === 90 || deg === 180 || deg === 270 ? deg : 0;
   }
 
-  // 返回归一化后的字节；没有页面带旋转时返回 null，让调用方直接用原字节，省一次重存
+  // 每页总旋转 = PDF 声明的 /Rotate + 用户在预览里手动追加的旋转
+  function pageRot(page, i) {
+    return (readRot(page) + (state.userRot[i] || 0)) % 360;
+  }
+  // 返回归一化 + 用户旋转后的字节；所有页都无需旋转时返回 null，让调用方直接用原字节，省一次重存
   function normalizeRotation(doc) {
     var pages = doc.getPages();
+    var rots = pages.map(function (p, i) { return pageRot(p, i); });
+    // 只要某页有「声明 /Rotate」或「用户手动旋转」（任一非 0）就得重存——
+    // 即便二者相加正好抵消成 0，也必须重存把声明的 /Rotate 剥进几何；
+    // 否则预览(pdf.js 自动应用 /Rotate) 与切分(pdf-lib 忽略 /Rotate) 坐标会错位。
     var need = false;
-    for (var i = 0; i < pages.length; i++) { if (readRot(pages[i]) !== 0) { need = true; break; } }
+    for (var i = 0; i < pages.length; i++) {
+      if (readRot(pages[i]) !== 0 || (state.userRot[i] || 0) !== 0) { need = true; break; }
+    }
     if (!need) return Promise.resolve(null);
 
     var out = null;
     var chain = PDFLib.PDFDocument.create().then(function (d) { out = d; });
-    pages.forEach(function (page) {
+    pages.forEach(function (page, i) {
       chain = chain.then(function () {
-        var rot = readRot(page);
+        var rot = rots[i];
         var sz = page.getSize(), W = sz.width, H = sz.height;
         return out.embedPage(page, { left: 0, bottom: 0, right: W, top: H }, ROT_MATRIX[rot](W, H))
           .then(function (emb) {
@@ -202,6 +213,19 @@
   $('btn-repick').addEventListener('click', function () { fileInput.click(); });
   $('btn-repick2').addEventListener('click', function () { fileInput.click(); });
 
+  // ---- 预览内手动旋转：点某页右上角的 ⟳，该页再顺时针转 90° ----
+  pvGrid.addEventListener('click', function (e) {
+    var btn = e.target.closest('.pv-rot');
+    if (!btn) return;
+    if (state.busy) return;                       // 切分处理中不打断
+    var item = btn.closest('.pv-item');
+    var idx = item && parseInt(item.getAttribute('data-idx'), 10);
+    if (isNaN(idx)) return;
+    state.userRot[idx] = ((state.userRot[idx] || 0) + 90) % 360;
+    // 旋转会改变页面尺寸/栏数，需重算字节并作废旧结果
+    reloadPreview().then(resetResult);
+  });
+
   function loadFile(file) {
     if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
       alert('请选择 PDF 文件');
@@ -217,21 +241,16 @@
     file.arrayBuffer().then(function (ab) {
       state.file = file;
       state.ab = ab;
-      return PDFLib.PDFDocument.load(ab.slice(0), { ignoreEncryption: true });
-    }).then(function (doc) {
-      return normalizeRotation(doc);
-    }).then(function (norm) {
-      state.bytes = norm || ab2bytes(state.ab);
-      return openPdf();
-    }).then(function () {
+      state.userRot = [];                 // 新文件清空手动旋转
       $('fi-name').textContent = file.name;
-      $('fi-sub').textContent = state.sizes.length + ' 页 · ' + fmtSize(file.size);
       cardFile.hidden = false;
       cardConfig.hidden = false;
       cardPreview.hidden = false;
       actionBar.hidden = false;
-      buildPreview();
       cardUpload.hidden = true;
+      return reloadPreview().then(function () {
+        $('fi-sub').textContent = state.sizes.length + ' 页 · ' + fmtSize(file.size);
+      });
     }).catch(function (e) {
       console.error(e);
       alert('无法打开该 PDF：\n' + (e && e.message ? e.message : e) +
@@ -240,6 +259,18 @@
   }
 
   function ab2bytes(ab) { return new Uint8Array(ab); }
+
+  // 按当前 userRot 从原始字节重算「已烘焙旋转」的工作字节，并刷新预览。
+  // 预览与切分共用这份字节，坐标系才始终一致；每次都从原始 ab 重建，不随点击次数累积失真。
+  function reloadPreview() {
+    return PDFLib.PDFDocument.load(state.ab.slice(0), { ignoreEncryption: true })
+      .then(function (doc) { return normalizeRotation(doc); })
+      .then(function (norm) {
+        state.bytes = norm || ab2bytes(state.ab);
+        return openPdf();
+      })
+      .then(function () { buildPreview(); });
+  }
 
   function openPdf() {
     // 换文件时释放上一份：pdf.js 的文档缓存与 worker 会一直占着内存，手机上吃紧
@@ -272,12 +303,19 @@
     for (var i = 0; i < state.sizes.length; i++) {
       (function (idx) {
         var s = state.sizes[idx];
+        var deg = state.userRot[idx] || 0;
         var item = document.createElement('div');
         item.className = 'pv-item';
+        item.setAttribute('data-idx', idx);
         item.innerHTML =
           '<div class="pv-wrap" style="aspect-ratio:' + Math.round(s.W) + ' / ' + Math.round(s.H) + '">' +
             '<canvas></canvas>' +
             '<div class="cut-layer"></div>' +
+            '<button type="button" class="pv-rot" title="旋转此页 90°" aria-label="旋转此页 90°">' +
+              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>' +
+              '<span class="rot-tag">' + deg + '°</span>' +
+            '</button>' +
           '</div>' +
           '<div class="pv-foot"></div>';
         pvGrid.appendChild(item);

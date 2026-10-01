@@ -10,6 +10,14 @@
 - [debug.mjs](file://pdftool_test/debug.mjs)
 </cite>
 
+## 更新摘要
+**所做更改**   
+- 更新了模式切换行为章节，详细说明固定列模式和自动模式的增强功能
+- 新增了 applyEqualCuts() 函数的技术实现说明
+- 更新了 bandsFor() 统一计算方法的描述
+- 完善了智能识别算法中精确边界位置存储机制
+- 增强了预览渲染与输出生成一致性的说明
+
 ## 目录
 1. [引言](#引言)
 2. [项目结构](#项目结构)
@@ -23,10 +31,12 @@
 10. [附录：关键算法对照](#附录关键算法对照)
 
 ## 引言
-本技术文档围绕“试卷切分助手”的PDF处理引擎展开，重点解释前端Web应用如何集成 pdf-lib 与 pdf.js 两大库，完成从文件加载、解析、旋转校正、页面裁剪到最终渲染输出的完整流程。文档还深入剖析旋转校正算法（/Rotate 读取与变换矩阵计算）、白边检测算法（像素扫描、墨迹检测、裁剪框计算）以及预览系统（pdf.js 渲染队列管理、位图缓存与性能优化），并给出关键函数的实现路径与调用时序说明。
+本技术文档围绕"试卷切分助手"的PDF处理引擎展开，重点解释前端Web应用如何集成 pdf-lib 与 pdf.js 两大库，完成从文件加载、解析、旋转校正、页面裁剪到最终渲染输出的完整流程。文档还深入剖析旋转校正算法（/Rotate 读取与变换矩阵计算）、白边检测算法（像素扫描、墨迹检测、裁剪框计算）以及预览系统（pdf.js 渲染队列管理、位图缓存与性能优化），并给出关键函数的实现路径与调用时序说明。
+
+**最新更新**：增强了模式切换行为，支持固定列模式的等分布局和自动模式的精确边界定位，通过统一的 bandsFor() 方法确保预览与输出的一致性。
 
 ## 项目结构
-仓库采用“Web本体 + Android壳工程 + 本地测试脚本”的分层组织方式：
+仓库采用"Web本体 + Android壳工程 + 本地测试脚本"的分层组织方式：
 - pdf-splitter：PWA Web本体，包含入口HTML、主逻辑 app.js 以及本地化的 pdf.js、pdf-lib 资源。
 - android：Android壳工程，通过 WebView 承载Web本体，并提供原生能力桥接。
 - pdftool_test：Node端验证脚本，用于离线校验 pdf-lib 的裁剪、缩放与批量嵌入行为。
@@ -70,7 +80,9 @@ DBG --> LIBS
 - 旋转校正
   - 读取 /Rotate，按角度选择预置变换矩阵，将内容顺时针烘焙到显示方向，并移除 /Rotate。
 - 页面裁剪与栏数识别
-  - 根据页面宽高比自动判断2栏或3栏，支持手动切换；可整体平移分割线。
+  - 支持三种模式：固定2栏、固定3栏、自动智能识别；可整体平移分割线。
+  - **新增**：固定列模式使用 applyEqualCuts() 在所有页面应用等分布局。
+  - **新增**：自动模式存储精确边界位置而非仅列数。
 - 白边检测
   - 对每栏渲染为位图后扫描像素，寻找最小墨迹矩形，作为实际裁剪框；未检测到墨迹时退回整栏。
 - 输出构建
@@ -101,6 +113,7 @@ JS->>JS : normalizeRotation(doc)
 JS->>PJ : getDocument({data : bytes})
 PJ-->>JS : 文档对象 + 每页viewport
 UI->>JS : 配置参数(栏数/边距/偏移/白边)
+JS->>JS : setMode() -> applyEqualCuts()/detectAllCols()
 JS->>PJ : 懒渲染可见页(IntersectionObserver)
 JS->>JS : trimBands(pno, pageH, bands)
 JS->>PL : embedPages(子区域列表)
@@ -113,6 +126,7 @@ JS->>FS : save() -> Blob/ObjectURL/原生通道
 - [app.js:243-263](file://pdf-splitter/app.js#L243-L263)
 - [app.js:265-329](file://pdf-splitter/app.js#L265-L329)
 - [app.js:412-508](file://pdf-splitter/app.js#L412-L508)
+- [app.js:546-560](file://pdf-splitter/app.js#L546-L560)
 
 ## 详细组件分析
 
@@ -170,32 +184,35 @@ AddPage --> Save["save(useObjectStreams=true)"]
 - [app.js:68-103](file://pdf-splitter/app.js#L68-L103)
 
 ### 页面裁剪与栏数识别
-- 栏数判定：默认自动模式，依据页面宽高比 r=W/H：r≥1.85→3栏；r≥1.2→2栏；否则1栏。
-- 分割线：每栏宽度 cw=W/n，支持全局 shift 偏移（百分比×cw）。
-- 输出：每个栏作为一个子区域，后续由 pdf-lib 批量嵌入并等比放入A4。
+
+**更新**：增强了模式切换行为，支持更灵活的分割策略。
+
+- **固定列模式**：当用户选择2栏或3栏时，系统使用 `applyEqualCuts(n)` 函数在所有页面上应用等分布局，确保每页都有相同的分割比例。
+- **自动模式**：继续执行内容分析，但现在存储精确的边界位置（cuts数组）而不仅仅是列数，提供更精细的控制。
+- **统一计算方法**：两种模式都使用 `bandsFor(i, W, H)` 函数计算实际的栏像素矩形，确保预览渲染和最终输出生成的一致性。
 
 ```mermaid
 flowchart TD
-W_H["获取页面W,H"] --> Ratio["计算比例 r=W/H"]
-Ratio --> Decide{"r>=1.85 ?"}
-Decide --> |是| N3["n=3"]
-Decide --> |否| Check2{"r>=1.2 ?"}
-Check2 --> |是| N2["n=2"]
-Check2 --> |否| N1["n=1"]
-N3 --> Cw["cw=W/n"]
-N2 --> Cw
-N1 --> Cw
-Cw --> Shift["可选shift偏移"]
-Shift --> Bands["生成bands[left,right]"]
+ModeSel["用户选择模式"] --> CheckMode{"mode类型?"}
+CheckMode --> |'2'| ApplyEq2["applyEqualCuts(2)"]
+CheckMode --> |'3'| ApplyEq3["applyEqualCuts(3)"]
+CheckMode --> |'auto'| DetectAll["detectAllCols()"]
+ApplyEq2 --> BandsCalc["bandsFor()统一计算"]
+ApplyEq3 --> BandsCalc
+DetectAll --> BandsCalc
+BandsCalc --> Preview["预览渲染"]
+Preview --> Output["最终输出"]
 ```
 
 图表来源
-- [app.js:45-54](file://pdf-splitter/app.js#L45-L54)
-- [app.js:427-457](file://pdf-splitter/app.js#L427-L457)
+- [app.js:47-67](file://pdf-splitter/app.js#L47-L67)
+- [app.js:140-151](file://pdf-splitter/app.js#L140-L151)
+- [app.js:546-560](file://pdf-splitter/app.js#L546-L560)
 
 章节来源
-- [app.js:45-54](file://pdf-splitter/app.js#L45-L54)
-- [app.js:427-457](file://pdf-splitter/app.js#L427-L457)
+- [app.js:47-67](file://pdf-splitter/app.js#L47-L67)
+- [app.js:140-151](file://pdf-splitter/app.js#L140-L151)
+- [app.js:546-560](file://pdf-splitter/app.js#L546-L560)
 
 ### 白边检测算法
 - 像素扫描 scanInk：逐行扫描RGBA数据，阈值低于240视为墨迹；记录最小/最大x/y，转换为PDF坐标并加入TRIM_PAD余量。
@@ -331,6 +348,7 @@ DBG["debug.mjs"] --> PL
 - 批量化嵌入：使用 embedPages 一次性嵌入多个子区域，减少对象复制与I/O。
 - 内存回收：临时canvas在处理后立即清空宽高，降低大扫描件内存占用。
 - UI线程让渡：关键步骤使用 await tick() 让出事件循环，保证进度条与交互流畅。
+- **新增**：统一的 bandsFor() 计算方法避免了重复计算，提升模式切换时的响应速度。
 
 [本节为通用性能建议，不直接分析具体文件]
 
@@ -347,13 +365,17 @@ DBG["debug.mjs"] --> PL
 - 输出方向错误
   - 可能原因：/Rotate未正确烘焙；坐标体系不一致。
   - 处理：确保 normalizeRotation 已执行；核对 ROT_MATRIX 与页面宽高交换逻辑。
+- **新增**：模式切换问题
+  - 可能原因：applyEqualCuts() 或 detectAllCols() 执行异常。
+  - 处理：检查 state.cuts 数组是否正确初始化；确认 bandsFor() 计算逻辑正常。
 
 章节来源
 - [app.js:234-239](file://pdf-splitter/app.js#L234-L239)
 - [app.js:497-508](file://pdf-splitter/app.js#L497-L508)
+- [app.js:546-560](file://pdf-splitter/app.js#L546-L560)
 
 ## 结论
-本PDF处理引擎通过 pdf-lib 与 pdf.js 的协同工作，实现了从旋转校正、栏数识别、白边检测到A4输出的一体化流程。旋转校正通过预置变换矩阵将 /Rotate 烘焙进内容，确保预览与裁剪坐标系一致；白边检测基于像素扫描与分条裁剪，兼顾精度与性能；预览系统通过懒渲染与位图缓存显著降低渲染成本。整体方案在移动端与浏览器环境中均具备良好可用性。
+本PDF处理引擎通过 pdf-lib 与 pdf.js 的协同工作，实现了从旋转校正、栏数识别、白边检测到A4输出的一体化流程。**最新增强**了模式切换行为，支持固定列模式的等分布局和自动模式的精确边界定位，通过统一的 bandsFor() 方法确保预览与输出的一致性。旋转校正通过预置变换矩阵将 /Rotate 烘焙进内容，确保预览与裁剪坐标系一致；白边检测基于像素扫描与分条裁剪，兼顾精度与性能；预览系统通过懒渲染与位图缓存显著降低渲染成本。整体方案在移动端与浏览器环境中均具备良好可用性。
 
 [本节为总结性内容，不直接分析具体文件]
 
@@ -385,3 +407,30 @@ DBG["debug.mjs"] --> PL
 
 章节来源
 - [app.js:153-193](file://pdf-splitter/app.js#L153-L193)
+
+### applyEqualCuts 函数要点（新增）
+- 功能：为所有页面应用等分布局的分割线。
+- 实现：遍历所有页面，为每页生成 equalCuts(n) 的结果，其中 n 为目标列数。
+- 使用场景：当用户选择固定2栏或3栏模式时调用。
+- 效果：确保所有页面都有相同比例的分割线，便于批量处理。
+
+章节来源
+- [app.js:149-151](file://pdf-splitter/app.js#L149-L151)
+
+### bandsFor 统一计算方法要点（增强）
+- 功能：根据 cuts 数组和全局 shift 计算每页各栏的实际像素矩形。
+- 统一性：固定列模式和自动模式共用此方法，确保预览与输出一致性。
+- 计算逻辑：考虑 cuts 比例、全局 shift 偏移、边界约束，生成 bounds 数组。
+- 返回值：返回 bands 数组，包含每栏的 left、right、bottom、top 坐标。
+
+章节来源
+- [app.js:57-67](file://pdf-splitter/app.js#L57-L67)
+
+### detectCutsFromCanvas 智能识别算法要点
+- 输入：canvas上下文、画布宽高。
+- 检测策略：①优先找竖线（含断续但贯穿上下的分隔线）②没竖线按空白沟③窄边条并入相邻栏。
+- 输出：返回 cuts 数组，包含精确的分割线位置比例。
+- 智能特性：自动识别2栏或3栏布局，处理边缘情况。
+
+章节来源
+- [app.js:82-119](file://pdf-splitter/app.js#L82-L119)

@@ -1,6 +1,6 @@
 schema_version: 1
 module_path: ""
-title: PdfSplitter 试卷切分工具集
+title: PDF 拼版试卷切分工具集
 scope:
     - README.md
     - .gitignore

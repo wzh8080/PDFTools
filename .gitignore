@@ -11,6 +11,8 @@ dist/
 android/local.properties
 android/keystore.properties
 android/keystore/
+# 兜底：keystore.properties 万一被误放到仓库根也挡掉（内含明文口令）
+/keystore.properties
 *.jks
 *.keystore
 

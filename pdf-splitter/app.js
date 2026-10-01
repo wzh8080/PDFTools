@@ -68,11 +68,12 @@
   function readRot(page) {
     var v = null;
     try {
-      v = page.node.get(PDFLib.PDFName.of('Rotate'));
-      if (!v && page.node.Parent) {
-        var parent = page.node.Parent();
-        if (parent && parent.get) v = parent.get(PDFLib.PDFName.of('Rotate'));
-      }
+      // /Rotate 是可继承属性，可能只写在祖先 Pages 节点上。
+      // getInheritableAttribute 会从本页沿整条父链向上取第一个有值的节点；
+      // 旧代码只查了一级 Parent，深层继承的旋转会被漏判，导致输出方向错误。
+      v = page.node.getInheritableAttribute
+        ? page.node.getInheritableAttribute(PDFLib.PDFName.of('Rotate'))
+        : page.node.get(PDFLib.PDFName.of('Rotate'));
     } catch (e) { /* 取不到就当不旋转 */ }
     var deg = v && typeof v.numberValue === 'number' ? v.numberValue : 0;
     deg = ((deg % 360) + 360) % 360;

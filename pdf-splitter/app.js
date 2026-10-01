@@ -311,6 +311,7 @@
       state.file = file;
       state.ab = ab;
       state.userRot = [];                 // 新文件清空手动旋转
+      setMode('2');                       // 新文件/换文件：默认回到「左右 2 栏」
       $('fi-name').textContent = file.name;
       cardFile.hidden = false;
       cardConfig.hidden = false;
@@ -476,12 +477,16 @@
   }
 
   // ---- 设置交互 ----
+  function setMode(m) {
+    state.mode = m;
+    $('seg-mode').querySelectorAll('button').forEach(function (b) {
+      b.classList.toggle('active', b.getAttribute('data-mode') === m);
+    });
+  }
   $('seg-mode').addEventListener('click', function (e) {
     var btn = e.target.closest('button');
     if (!btn) return;
-    state.mode = btn.getAttribute('data-mode');
-    var all = $('seg-mode').querySelectorAll('button');
-    all.forEach(function (b) { b.classList.toggle('active', b === btn); });
+    setMode(btn.getAttribute('data-mode'));
     resetResult();
     if (cardPreview.hidden) return;
     if (state.mode === 'auto') { detectAllCols(); }   // 智能识别：按内容检测每页栏数

@@ -195,6 +195,7 @@
     var jobs = [], done = 0, total = state.sizes.length, btnP = $('btn-process');
     setProgress(2, '正在识别 0 / ' + total + ' 页…');
     if (btnP) btnP.disabled = true;          // 识别期间不让点切分，否则会把还没测完的页当 1 栏切掉
+    document.body.classList.add('busy-lock');  // 其余控件一并做成禁用态
     for (var i = 0; i < total; i++) {
       (function (idx) {
         jobs.push(analyzeCuts(idx).then(function (c) {
@@ -207,6 +208,7 @@
     return Promise.all(jobs).then(function () {
       clearProgress();
       if (btnP) btnP.disabled = false;
+      document.body.classList.remove('busy-lock');
       updateOverlays();
     });
   }
@@ -478,8 +480,16 @@
   // ---- 单页全屏：把这一页的预览卡整个搬进覆盖层，放大后精细拖/删/加分割线 ----
   // 只用覆盖层自己铺满视口，不碰原生 Fullscreen API：WebView 里 requestFullscreen 不可靠，
   // 而它的 fullscreenchange 事件还会和「重建预览后重新进入全屏」抢状态，把焦点弄丢。
-  var fsItem = null;
-  function enterFocus(i) {
+  var fsItem = null, fsPushed = false, fsVv = null;
+  // position:fixed 是相对「布局视口」定位的，手机上双指缩放后它会跟着内容飘；
+  // 用 visualViewport 的偏移把工具条顶回屏幕右上角。
+  function pinFsBar() {
+    var bar = $('fs-bar');
+    if (!bar || !fsVv) return;
+    bar.style.transform = 'translate(' + fsVv.offsetLeft + 'px,' + fsVv.offsetTop + 'px)';
+  }
+  // viaRebuild：由 buildPreview 重建后重新进入，此时历史里那条记录还在，不要再压一条
+  function enterFocus(i, viaRebuild) {
     var it = previewItems[i];
     if (!it || fsItem || state.busy) return;
     fsItem = it;
@@ -487,21 +497,45 @@
     fsHolder.appendChild(it.el);
     fsLayer.hidden = false;
     document.body.classList.add('fs-on');
+    if (window.visualViewport && !fsVv) {
+      fsVv = window.visualViewport;
+      fsVv.addEventListener('resize', pinFsBar);
+      fsVv.addEventListener('scroll', pinFsBar);
+    }
+    pinFsBar();
+    if (viaRebuild) return;
+    // 压一条历史记录：手机返回键先被 WebView 用来后退，页面据此关掉全屏层，而不是直接退出应用
+    try { history.pushState({ pvfs: 1 }, ''); fsPushed = true; } catch (e) { fsPushed = false; }
   }
-  function exitFocus() {
+  // via: 空=用户点退出/Esc；'rebuild'=重建预览（不动历史）；'pop'=返回键已经弹掉记录了
+  function exitFocus(via) {
     if (!fsItem) return;
     var it = fsItem;
     fsItem = null;
     fsLayer.hidden = true;
     document.body.classList.remove('fs-on');
+    if (fsVv) {
+      fsVv.removeEventListener('resize', pinFsBar);
+      fsVv.removeEventListener('scroll', pinFsBar);
+      fsVv = null;
+    }
+    var bar = $('fs-bar');
+    if (bar) bar.style.transform = '';
+    if (via === 'rebuild') {
+      // 保持 fsPushed，紧接着的 enterFocus(i, true) 会复用同一条记录
+    } else {
+      if (via !== 'pop' && fsPushed) history.back();
+      fsPushed = false;
+    }
     var next = (it.fsNext && it.fsNext.parentNode === pvGrid) ? it.fsNext : null;
     pvGrid.insertBefore(it.el, next);
     it.fsNext = null;
   }
+  window.addEventListener('popstate', function () { if (fsItem) exitFocus('pop'); });
 
   function buildPreview() {
     var refocus = fsItem ? fsItem.idx : -1;
-    exitFocus();
+    exitFocus('rebuild');
     pvGrid.innerHTML = '';
     var items = previewItems = [];
     for (var i = 0; i < state.sizes.length; i++) {
@@ -537,7 +571,7 @@
       })(i);
     }
     updateOverlays();
-    if (refocus >= 0) enterFocus(refocus);   // 旋转等重建预览后，全屏层继续盯着同一页
+    if (refocus >= 0) enterFocus(refocus, true);   // 旋转等重建预览后，全屏层继续盯着同一页
 
     // 懒加载渲染
     if (!('IntersectionObserver' in window)) {
@@ -699,7 +733,7 @@
     var fs = e.target.closest('.pv-fs');
     if (fs) enterFocus(parseInt(fs.getAttribute('data-page'), 10));
   });
-  $('fs-exit').addEventListener('click', exitFocus);
+  $('fs-exit').addEventListener('click', function () { exitFocus(); });
   window.addEventListener('keydown', function (e) { if (e.key === 'Escape') exitFocus(); });
 
   // ---- 设置交互 ----

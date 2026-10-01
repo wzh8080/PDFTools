@@ -131,10 +131,22 @@ updated: 2026-10-01
   - **不要用原生 Fullscreen API**：WebView 里 `requestFullscreen` 不可靠，且它的
     `fullscreenchange` 事件会和"重建后重新进入"抢状态，把焦点弄丢（实测踩过）。覆盖层
     `position:fixed;inset:0` 本身已经铺满视口。
+  - **退出按钮要跟着视觉视口走**：`position:fixed` 是相对*布局*视口定位的，手机上双指缩放后
+    工具条会跟内容一起飘。解法：监听 `visualViewport` 的 `resize`/`scroll`，把 `#fs-bar`
+    `translate(offsetLeft, offsetTop)` 顶回屏幕角（`pinFsBar()`），退出时清 transform 与监听。
+  - **手机返回键先关全屏层而不是退出应用**：原生侧 `MainActivity` 已有
+    `onBackPressedDispatcher.addCallback { if (webView.canGoBack()) goBack() else finish() }`，
+    所以 JS 只需进全屏时 `history.pushState({pvfs:1})` + 监听 `popstate` 调 `exitFocus('pop')`。
+    三条路径的历史必须分清：用户点退出/Esc → `exitFocus()` 自己 `history.back()` 弹掉那条记录；
+    重建预览（旋转等）→ `exitFocus('rebuild')` 后 `enterFocus(i, true)` **复用同一条**，
+    否则每转一次多压一条、返回键要按好几次才退得掉。实测：进入 +1 条、旋转后仍 1 条、
+    返回后关层且 16 页预览仍在原位。
 - **智能识别有进度**：`detectAllCols()` 复用底部操作栏的进度条（`setProgress` / `clearProgress`），
-  文案「正在识别 n / N 页…」，按每页 `analyzeCuts` 完成数递增；识别期间
-  **`#btn-process` 置 disabled**，因为 `state.cuts` 是逐页写入的，中途点切分会把
-  还没测完的页当 1 栏切掉。识别结束必须同时 `clearProgress()` + 恢复按钮。
+  文案「正在识别 n / N 页…」，按每页 `analyzeCuts` 完成数递增；识别期间给 `<body>` 加
+  `busy-lock` 类，CSS 把配置卡、整篇旋转按钮、分割线把手、加号、全屏按钮一律
+  `pointer-events:none` + 降透明度，`#btn-process` 走原生 `disabled`。
+  原因是 `state.cuts` 逐页写入，中途改参数或点切分会把还没测完的页当 1 栏切掉。
+  结束必须同时 `clearProgress()` + 去掉 `busy-lock` + 恢复按钮。
 - 边距（左右 / 上下）与切分线微调三个滑块，两侧各有 `−` / `+` 步进按钮，点一次动一个单位，
   改值后 `dispatch input` 复用既有 handler，保证数值、标签、预览三者同步并钳制在 min/max。
 - 任何改动 `state.cuts` 的路径（拖动、删除、新增、换模式、`pointercancel`）都必须调

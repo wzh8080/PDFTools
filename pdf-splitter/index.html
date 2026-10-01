@@ -130,13 +130,19 @@
   .pv-fs:active{background:var(--primary-soft);}
   .pv-focus{position:fixed;inset:0;z-index:60;background:#0f1523;display:flex;flex-direction:column;padding:10px 10px calc(10px + env(safe-area-inset-bottom));}
   .pv-focus[hidden]{display:none;}
-  .fs-bar{display:flex;justify-content:flex-end;padding:0 0 8px;}
+  .fs-bar{display:flex;justify-content:flex-end;padding:0 0 8px;will-change:transform;}
   .fs-exit{border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.12);color:#fff;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;}
   .fs-exit:active{background:rgba(255,255,255,.24);}
   .fs-holder{flex:1;min-height:0;overflow:auto;display:flex;align-items:center;justify-content:center;}
   .fs-holder .pv-item{width:100%;background:#fff;}
   .pv-focus .pv-fs{display:none;}
   body.fs-on{overflow:hidden;}
+  /* 识别进行中：可调控件一律做成禁用态 */
+  .btn:disabled{opacity:.45;cursor:default;}
+  .btn:disabled:active{background:inherit;}
+  body.busy-lock #card-config,body.busy-lock .rot-all,body.busy-lock .cut-handle,body.busy-lock .pv-rot,body.busy-lock .pv-add,body.busy-lock .pv-fs{pointer-events:none;}
+  body.busy-lock #card-config,body.busy-lock .rot-all{opacity:.55;}
+  body.busy-lock .cut-handle,body.busy-lock .pv-rot,body.busy-lock .pv-add,body.busy-lock .pv-fs{opacity:.4;}
   .rot-all{display:flex;gap:8px;margin:0 0 12px;}
   .rot-all button{flex:1;border:1.5px solid var(--line);background:#fff;border-radius:9px;padding:8px 6px;font-size:13px;font-weight:600;color:var(--primary);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;}
   .rot-all button:active{background:var(--primary-soft);}
@@ -336,7 +342,7 @@
 
 <!-- 单页全屏层：把选中的预览卡搬进来，放大后精细调整分割线 -->
 <div class="pv-focus" id="pv-focus" hidden>
-  <div class="fs-bar"><button type="button" class="fs-exit" id="fs-exit">退出全屏</button></div>
+  <div class="fs-bar" id="fs-bar"><button type="button" class="fs-exit" id="fs-exit">退出全屏</button></div>
   <div class="fs-holder" id="fs-holder"></div>
 </div>
 

@@ -44,9 +44,24 @@
     if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
     return (b / 1048576).toFixed(2) + ' MB';
   }
+  // 轻提示：不打断操作，也不要求确认，一会儿自己消失
+  var toastTimer = null, toastOutTimer = null;
+  function toast(msg) {
+    var t = $('toast');
+    if (!t) return;
+    t.textContent = msg;
+    t.hidden = false;
+    void t.offsetWidth;                 // 逼一次重排，连点时才能重新走淡入动画
+    t.classList.add('on');
+    clearTimeout(toastTimer); clearTimeout(toastOutTimer);
+    toastTimer = setTimeout(function () {
+      t.classList.remove('on');
+      toastOutTimer = setTimeout(function () { t.hidden = true; }, 220);
+    }, 1800);
+  }
   // ---- 分割线模型：每页一组内部边界占页宽比例（不含全局 shift）----
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-  var MAX_CUTS = 2;   // 每页最多两条内部边界，即最多 3 栏
+  var MAX_MANUAL_CUTS = 4;   // 手动加线每页最多 4 条（智能识别仍只给到 2 条，即最多 3 栏）
   function equalCuts(n) { var a = []; for (var k = 1; k < n; k++) a.push(k / n); return a; }
   // 取某页当前边界；未设置时按当前模式给默认（auto 未检测前暂按 2 栏）
   function cutsFor(i) {
@@ -544,8 +559,6 @@
       var foot = nodes[i].querySelector('.pv-foot');
       foot.innerHTML = '<span>原第 <b>' + (i + 1) + '</b> 页</span>' +
                        '<span>' + (n === 1 ? '保持 1 页' : '切出 <b>' + n + '</b> 页') + '</span>';
-      var addBtn = nodes[i].querySelector('.pv-add');
-      if (addBtn) addBtn.disabled = (n - 1 >= MAX_CUTS);   // 满 3 栏就点不动，避免无上限细分
       if ((state.mode === '2' || state.mode === '3') && n !== parseInt(state.mode, 10)) mismatch = true;
       total += n;
     }
@@ -602,20 +615,19 @@
     updateOverlays();
     resetResult();
   }
-  // 加号落在当前最宽那一栏的正中；满 3 栏不再细分，最宽处不足 12% 页宽时也不分，避免切出废页
+  // 加号落在当前最宽那一栏的正中；到上限就轻提示一句
   function addCut(i) {
     if (!(i >= 0)) return;
     var cuts = materializeCuts(i);
-    if (cuts.length >= MAX_CUTS) return;
+    if (cuts.length >= MAX_MANUAL_CUTS) { toast('每页最多 ' + MAX_MANUAL_CUTS + ' 条分割线'); return; }
     var bounds = [0], kk;
     for (kk = 0; kk < cuts.length; kk++) bounds.push(cuts[kk]);
     bounds.push(1);
-    var bestK = -1, bestW = 0;
+    var bestK = 1, bestW = 0;
     for (kk = 1; kk < bounds.length; kk++) {
       var wd = bounds[kk] - bounds[kk - 1];
       if (wd > bestW) { bestW = wd; bestK = kk; }
     }
-    if (bestK < 1 || bestW < 0.12) return;
     cuts.push((bounds[bestK - 1] + bounds[bestK]) / 2);
     cuts.sort(function (a, b) { return a - b; });
     updateOverlays();

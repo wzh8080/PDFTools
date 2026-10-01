@@ -102,6 +102,8 @@
   .pv-wrap canvas{display:block;width:100%;height:auto;}
   .cut-line{position:absolute;top:0;bottom:0;width:0;border-left:2px dashed var(--cut);transform:translateX(-1px);pointer-events:none;}
   .cut-lbl{position:absolute;top:3px;transform:translateX(-50%);background:var(--cut);color:#fff;font-size:10px;line-height:1;padding:2px 5px;border-radius:4px;white-space:nowrap;}
+  .cut-handle{pointer-events:auto;cursor:ew-resize;touch-action:none;}
+  .cut-grip{position:absolute;top:50%;left:0;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;background:var(--cut);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);}
   .pv-foot{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;font-size:12px;color:var(--ink-2);background:#fff;}
   .pv-foot b{color:var(--ink);font-weight:600;}
   .pv-rot{position:absolute;top:6px;width:34px;height:34px;border-radius:9px;border:1px solid var(--line);background:rgba(255,255,255,.94);color:var(--primary);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:var(--shadow);pointer-events:auto;z-index:3;padding:0;}

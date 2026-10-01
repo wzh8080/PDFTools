@@ -17,7 +17,7 @@
     pdf: null,           // pdf.js 文档
     sizes: [],           // 每页 {W,H}（归一化 + 用户手动旋转后的实际显示尺寸）
     userRot: [],         // 每页用户在预览里手动追加的旋转角度 0/90/180/270
-    cols: [],            // 智能识别模式下每页检测到的栏数（仅点「智能识别」时才计算）
+    cuts: [],            // 每页分割线边界占页宽比例（智能识别/手动拖动会写它）
     mode: '2',           // 默认「左右 2 栏」；取值 '2' / '3' / 'auto'(智能识别)
     marginX: 10,         // 左右边距 mm，滑块 0–20
     marginY: 20,         // 上下边距 mm，滑块 0–40（决定放大率）
@@ -44,41 +44,81 @@
     if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
     return (b / 1048576).toFixed(2) + ' MB';
   }
-  // 某页栏数：智能识别用内容检测结果，否则用手动指定的固定栏数
-  function colCount(i) {
-    if (state.mode === 'auto') return state.cols[i] || 1;
-    return parseInt(state.mode, 10);
+  // ---- 分割线模型：每页一组内部边界占页宽比例（不含全局 shift）----
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function equalCuts(n) { var a = []; for (var k = 1; k < n; k++) a.push(k / n); return a; }
+  // 取某页当前边界；未设置时按当前模式给默认（auto 未检测前暂按 2 栏）
+  function cutsFor(i) {
+    if (state.cuts[i]) return state.cuts[i];
+    var n = state.mode === 'auto' ? 2 : (parseInt(state.mode, 10) || 1);
+    return equalCuts(n);
+  }
+  function numBands(i) { return cutsFor(i).length + 1; }
+  // 由 cuts + 全局 shift 算出该页各栏像素矩形（预览与切分共用，坐标才一致）
+  function bandsFor(i, W, H) {
+    var cuts = cutsFor(i), n = cuts.length + 1, cw = W / n, shiftPx = state.shift / 100 * cw;
+    var bounds = [0];
+    for (var k = 0; k < cuts.length; k++) bounds.push(clamp(cuts[k] * W + shiftPx, 1, W - 1));
+    bounds.push(W);
+    for (k = 1; k < bounds.length; k++) if (bounds[k] <= bounds[k - 1]) bounds[k] = Math.min(W, bounds[k - 1] + 1);
+    var bands = [];
+    for (k = 0; k < n; k++) bands.push({ left: bounds[k], right: bounds[k + 1], bottom: 0, top: H });
+    return bands;
   }
 
-  // 比例兑底（仅内容渲染失败时用）：栏数是内容属性，同尺寸的 2/3 栏比值相同，
-  // 所以自动不能只靠宽高比，必须看内容（下方 countInkBands）。
+  // 比例兜底（仅内容渲染失败时用）
   function detectCols(W, H) {
     var r = W / H;
     if (r >= 1.85) return 3;
     if (r >= 1.2) return 2;
     return 1;
   }
-  // 把页面渲染成低分辨率位图，做纵向墨迹投影，数被空白沟隔开的“有墨区段”个数 = 栏数
-  function countInkBands(ctx, w, h) {
-    var data = ctx.getImageData(0, 0, w, h).data;
-    var colHas = new Uint8Array(w);
-    for (var x = 0; x < w; x++) {
-      var ink = 0;
-      for (var y = 0; y < h; y++) {
-        var p = (y * w + x) * 4;
-        if (data[p] < 200 || data[p + 1] < 200 || data[p + 2] < 200) { ink++; if (ink > 2) break; }
-      }
-      colHas[x] = ink > 2 ? 1 : 0;
-    }
-    var minGap = Math.max(6, Math.round(w * 0.03));   // 栏间空白沟至少 3% 宽
-    var bands = 0, inBand = false, gap = 0;
-    for (var x2 = 0; x2 < w; x2++) {
-      if (colHas[x2]) { if (!inBand) { inBand = true; bands++; } gap = 0; }
-      else if (inBand) { gap++; if (gap >= minGap) { inBand = false; gap = 0; } }
-    }
-    return Math.max(1, Math.min(3, bands));
+  function groupRuns(flag, w) {
+    var runs = [], s = -1;
+    for (var x = 0; x < w; x++) { if (flag[x] && s < 0) s = x; else if (!flag[x] && s >= 0) { runs.push({ start: s, end: x - 1 }); s = -1; } }
+    if (s >= 0) runs.push({ start: s, end: w - 1 });
+    return runs;
   }
-  function analyzeCols(pno) {
+  // 从位图算分割线：①优先找竖线(含断续但贯穿上下的分隔线) ②没竖线按空白沟 ③窄边条并入相邻栏
+  function detectCutsFromCanvas(ctx, w, h) {
+    var data = ctx.getImageData(0, 0, w, h).data;
+    var colInk = new Int32Array(w), x, y;
+    for (x = 0; x < w; x++) { var c = 0; for (y = 0; y < h; y++) { var p = (y * w + x) * 4; if (data[p] < 200 || data[p + 1] < 200 || data[p + 2] < 200) c++; } colInk[x] = c; }
+    var cuts = null;
+    // ① 竖线：某列纵向墨迹占比高且很窄
+    var lineT = Math.round(h * 0.45), isLine = new Uint8Array(w);
+    for (x = 0; x < w; x++) isLine[x] = colInk[x] >= lineT ? 1 : 0;
+    var lineCuts = [];
+    groupRuns(isLine, w).forEach(function (r) {
+      var wd = r.end - r.start + 1, ctr = (r.start + r.end) / 2 / w;
+      if (wd <= Math.max(3, Math.round(w * 0.03)) && ctr > 0.12 && ctr < 0.88) lineCuts.push(ctr);
+    });
+    if (lineCuts.length >= 1) { cuts = lineCuts; }
+    else {
+      // ② 空白沟分栏
+      var inkT = Math.max(2, Math.round(h * 0.012)), hasInk = new Uint8Array(w);
+      for (x = 0; x < w; x++) hasInk[x] = colInk[x] > inkT ? 1 : 0;
+      var minGap = Math.max(4, Math.round(w * 0.02)), merged = [];
+      groupRuns(hasInk, w).forEach(function (b) {
+        if (merged.length && b.start - merged[merged.length - 1].end < minGap) merged[merged.length - 1].end = b.end;
+        else merged.push({ start: b.start, end: b.end });
+      });
+      merged = merged.filter(function (b) { return (b.end - b.start) >= w * 0.03; });
+      if (merged.length >= 2) {
+        cuts = [];
+        for (var k = 1; k < merged.length; k++) cuts.push((merged[k - 1].end + merged[k].start) / 2 / w);
+        // ③ 窄边条并入相邻栏（首/尾太窄则去掉那个切点）
+        var total = merged[merged.length - 1].end - merged[0].start;
+        if (cuts.length && (merged[0].end - merged[0].start) < total * 0.16) cuts.shift();
+        if (cuts.length && (merged[merged.length - 1].end - merged[merged.length - 1].start) < total * 0.16) cuts.pop();
+      } else { cuts = []; }
+    }
+    cuts.sort(function (a, b) { return a - b; });
+    if (cuts.length > 2) cuts = cuts.slice(0, 2);   // 最多 3 栏
+    return cuts;
+  }
+  function analyzeCuts(pno) {
+    function fallback() { var s = state.sizes[pno]; return s ? equalCuts(detectCols(s.W, s.H)) : []; }
     return state.pdf.getPage(pno + 1).then(function (page) {
       var base = page.getViewport({ scale: 1 });
       var scale = Math.min(1, 420 / base.width);
@@ -89,25 +129,25 @@
       var ctx = canvas.getContext('2d', { willReadFrequently: true });
       ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
       return page.render({ canvasContext: ctx, viewport: vp }).promise.then(function () {
-        var n = countInkBands(ctx, canvas.width, canvas.height);
-        canvas.width = canvas.height = 0;
-        return n;
-      }, function () {
-        canvas.width = canvas.height = 0;
-        var s = state.sizes[pno]; return s ? detectCols(s.W, s.H) : 1;   // 渲染失败回退到比例启发
+        var cuts;
+        try { cuts = detectCutsFromCanvas(ctx, canvas.width, canvas.height); }
+        catch (err) { console.error('detectCuts 失败', err); cuts = fallback(); }
+        canvas.width = canvas.height = 0; return cuts;
       });
-    });
+    }).catch(function (e) { console.error('analyzeCuts 失败', pno, e); return fallback(); });
   }
-  // 智能识别：逐页内容检测，结果存 state.cols，再刷新切分线
+  // 智能识别：逐页内容检测，结果写入 state.cuts
   function detectAllCols() {
     if (!state.pdf) return Promise.resolve();
-    state.cols = [];
+    state.cuts = [];
     var jobs = [];
     for (var i = 0; i < state.sizes.length; i++) {
-      (function (idx) { jobs.push(analyzeCols(idx).then(function (n) { state.cols[idx] = n; })); })(i);
+      (function (idx) { jobs.push(analyzeCuts(idx).then(function (c) { state.cuts[idx] = c; })); })(i);
     }
     return Promise.all(jobs).then(function () { updateOverlays(); });
   }
+  // 固定栏数：把所有页铺成等分
+  function applyEqualCuts(n) { state.cuts = []; for (var i = 0; i < state.sizes.length; i++) state.cuts[i] = equalCuts(n); }
   function tick() { return new Promise(function (r) { setTimeout(r, 0); }); }
 
   // ---- 旋转校正 ----
@@ -311,6 +351,7 @@
       state.file = file;
       state.ab = ab;
       state.userRot = [];                 // 新文件清空手动旋转
+      state.cuts = [];                    // 新文件清空自定义分割线
       setMode('2');                       // 新文件/换文件：默认回到「左右 2 栏」
       $('fi-name').textContent = file.name;
       cardFile.hidden = false;
@@ -444,23 +485,20 @@
     return vp;
   }
 
-  // 更新切分线 / 标签 / 输出页数（设置变化时调用，不重渲染 canvas）
+  // 更新切分线（可拖把手）/ 标签 / 输出页数（不重渲染 canvas）
   function updateOverlays() {
     var total = 0;
     var nodes = pvGrid.querySelectorAll('.pv-item');
     for (var i = 0; i < nodes.length; i++) {
       var s = state.sizes[i];
-      var n = colCount(i);
-      var cw = s.W / n;
-      var shiftPx = state.shift / 100 * cw;
+      var bands = bandsFor(i, s.W, s.H);
+      var n = bands.length;
       var layer = nodes[i].querySelector('.cut-layer');
       var html = '';
       for (var k = 1; k < n; k++) {
-        var x = k * cw + shiftPx;
-        var pct = (x / s.W) * 100;
-        pct = Math.max(2, Math.min(98, pct));
-        html += '<div class="cut-line" style="left:' + pct.toFixed(2) + '%">' +
-                '<span class="cut-lbl">' + k + '</span></div>';
+        var pct = clamp(bands[k].left / s.W * 100, 1.5, 98.5);
+        html += '<div class="cut-line cut-handle" data-page="' + i + '" data-k="' + k + '" style="left:' + pct.toFixed(2) + '%">' +
+                '<span class="cut-lbl">' + k + '</span><span class="cut-grip"></span></div>';
       }
       layer.className = 'cut-layer';
       layer.style.position = 'absolute';
@@ -476,6 +514,34 @@
     return total;
   }
 
+  // ---- 拖动分割线：按住某页的把手横向拖，只改该页那条边界（全局 shift 仍叠加）----
+  var dragCtx = null;
+  pvGrid.addEventListener('pointerdown', function (e) {
+    var h = e.target.closest('.cut-handle');
+    if (!h || state.busy) return;
+    var item = h.closest('.pv-item');
+    var i = parseInt(item.getAttribute('data-idx'), 10);
+    var k = parseInt(h.getAttribute('data-k'), 10);   // 1-based 内部边界
+    if (isNaN(i) || isNaN(k)) return;
+    if (!state.cuts[i]) state.cuts[i] = cutsFor(i).slice();
+    var wrap = item.querySelector('.pv-wrap');
+    dragCtx = { i: i, k: k, rect: wrap.getBoundingClientRect(), W: state.sizes[i].W };
+    e.preventDefault();
+  });
+  window.addEventListener('pointermove', function (e) {
+    if (!dragCtx) return;
+    var cuts = state.cuts[dragCtx.i];
+    var n = cuts.length + 1, cw = dragCtx.W / n, shiftPx = state.shift / 100 * cw;
+    var frac = (e.clientX - dragCtx.rect.left) / dragCtx.rect.width;   // 显示位置 0..1
+    var base = frac - shiftPx / dragCtx.W;                              // 反推不含 shift 的基准
+    var lo = (dragCtx.k - 2 >= 0) ? cuts[dragCtx.k - 2] + 0.04 : 0.04;
+    var hi = (dragCtx.k < cuts.length) ? cuts[dragCtx.k] - 0.04 : 0.96;
+    cuts[dragCtx.k - 1] = clamp(base, lo, hi);
+    updateOverlays();
+  });
+  window.addEventListener('pointerup', function () { if (dragCtx) { dragCtx = null; resetResult(); } });
+  window.addEventListener('pointercancel', function () { dragCtx = null; });
+
   // ---- 设置交互 ----
   function setMode(m) {
     state.mode = m;
@@ -489,8 +555,8 @@
     setMode(btn.getAttribute('data-mode'));
     resetResult();
     if (cardPreview.hidden) return;
-    if (state.mode === 'auto') { detectAllCols(); }   // 智能识别：按内容检测每页栏数
-    else { updateOverlays(); }
+    if (state.mode === 'auto') { detectAllCols(); }                        // 智能识别：按内容检测每页分割线
+    else { applyEqualCuts(parseInt(state.mode, 10)); updateOverlays(); }   // 固定栏数：重新铺等分
   });
   $('margin-x-range').addEventListener('input', function () {
     state.marginX = parseInt(this.value, 10);
@@ -566,15 +632,7 @@
       for (var pno = 0; pno < srcPages.length; pno++) {
         var sz = srcPages[pno].getSize();
         var W = sz.width, H = sz.height;
-        var n = colCount(pno);
-        var cw = W / n;
-        var shiftPx = state.shift / 100 * cw;
-        var bands = [];
-        for (var k = 0; k < n; k++) {
-          var x0 = k * cw + shiftPx;
-          x0 = Math.max(0, Math.min(x0, W - cw));
-          bands.push({ left: x0, right: x0 + cw });
-        }
+        var bands = bandsFor(pno, W, H);
 
         // 已预览过的页在 trimBands 里直接复用位图；没预览过的页要等一次 pdf.js
         // 栅格化（约 1s/页），这就是「处理会稍慢」提示所指的那段时间
@@ -625,7 +683,7 @@
 
       var t = 0;
       for (var j = 0; j < state.sizes.length; j++) {
-        t += colCount(j);
+        t += numBands(j);
       }
       $('r-sub').textContent = '共 ' + t + ' 页 · A4 纵向 · ' + fmtSize(bytes.length);
       cardResult.hidden = false;

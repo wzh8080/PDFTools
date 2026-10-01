@@ -417,7 +417,6 @@
     for (var i = 0; i < state.sizes.length; i++) {
       (function (idx) {
         var s = state.sizes[idx];
-        var deg = state.userRot[idx] || 0;
         var item = document.createElement('div');
         item.className = 'pv-item';
         item.setAttribute('data-idx', idx);
@@ -432,7 +431,6 @@
             '<button type="button" class="pv-rot pv-rot-r" data-rot="90" title="此页顺时针转 90°" aria-label="此页顺时针转 90°">' +
               '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
                 '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>' +
-              '<span class="rot-tag">' + deg + '°</span>' +
             '</button>' +
           '</div>' +
           '<div class="pv-foot"></div>';

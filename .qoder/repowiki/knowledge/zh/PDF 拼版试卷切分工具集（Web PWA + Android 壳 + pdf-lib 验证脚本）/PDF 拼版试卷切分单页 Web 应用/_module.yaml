@@ -1,6 +1,6 @@
 schema_version: 1
 module_path: web_app
-title: 试卷切分助手（PDF 前端应用）
+title: PDF 拼版试卷切分单页 Web 应用
 scope:
     - pdf-splitter/
 source_files: []

@@ -3,11 +3,11 @@ schema_version: 1
 locale: zh-CN
 branch: main
 nodes_managed: true
-exported_at: "2026-10-01T04:49:33Z"
+exported_at: "2026-10-01T06:19:21Z"
 modules:
     "":
-        dir_name: 试卷切分助手（PdfSplitter）仓库根
-        title: 试卷切分助手（PdfSplitter）仓库根
+        dir_name: PDF 拼版试卷切分工具集（Web PWA + Android 壳 + pdf-lib 验证脚本）
+        title: PDF 拼版试卷切分工具集（Web PWA + Android 壳 + pdf-lib 验证脚本）
         scope:
             - README.md
             - .gitignore
@@ -41,8 +41,8 @@ modules:
         depends_on: []
         related_to: []
     web_app:
-        dir_name: 试卷切分助手（PDF 前端应用）
-        title: 试卷切分助手（PDF 前端应用）
+        dir_name: PDF 拼版试卷切分单页 Web 应用
+        title: PDF 拼版试卷切分单页 Web 应用
         scope:
             - pdf-splitter/
         source_files: []

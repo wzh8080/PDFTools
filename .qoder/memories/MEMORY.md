@@ -11,6 +11,7 @@
 
 - [Android 构建与迁移环境核对](android-build-migration.md) — 换机时 build android/ 模块要核对的清单：JDK17 / SDK platform 36 / local.properties / 签名 / Gradle 9.7.1 缓存
 - [pdf-splitter 三个暂缓的优化点](pdf-splitter-deferred-decisions.md) — 边距文案、预览预热 20 页方案、切分位图复用；含实测数字，用户 2026-09-30 决定暂不动
+- [思考与工作准则](working-principles.md) — 先查前提、独立判断不迎合、核实来源、敢指出错误；外加每任务提交+隐私安检、草稿放工程外
 
 ## 与其它记忆存放处的关系
 

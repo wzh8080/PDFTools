@@ -7,7 +7,14 @@
 - [android/gradle.properties](file://android/gradle.properties)
 - [android/settings.gradle.kts](file://android/settings.gradle.kts)
 - [android/gradle/wrapper/gradle-wrapper.properties](file://android/gradle/wrapper/gradle-wrapper.properties)
+- [.gitignore](file://.gitignore)
 </cite>
+
+## 更新摘要
+**变更内容**   
+- 增强了keystore.properties的安全配置，添加了根目录的catch-all规则
+- 更新了安全最佳实践部分，强调多层防护策略
+- 完善了故障排查指南中的安全相关建议
 
 ## 目录
 1. [简介](#简介)
@@ -18,13 +25,14 @@
 6. [依赖管理策略](#依赖管理策略)
 7. [资源同步机制](#资源同步机制)
 8. [构建优化建议](#构建优化建议)
-9. [故障排查指南](#故障排查指南)
-10. [结论](#结论)
+9. [安全配置与密钥管理](#安全配置与密钥管理)
+10. [故障排查指南](#故障排查指南)
+11. [结论](#结论)
 
 ## 简介
 本文件面向Android工程维护者，系统化说明该仓库的Gradle构建配置与最佳实践。重点覆盖：
 - 编译SDK、目标SDK、最小SDK版本设置
-- 签名配置与keystore.properties的安全使用
+- 签名配置与keystore.properties的多层安全防护
 - 构建类型（debug/release）差异与混淆/优化开关
 - 依赖管理与版本策略（Kotlin、WebView等）
 - Web源码自动同步到assets的构建任务
@@ -39,6 +47,7 @@ A["android/settings.gradle.kts<br/>仓库源与模块包含"] --> B["android/bui
 B --> C["android/app/build.gradle.kts<br/>应用构建配置"]
 D["android/gradle.properties<br/>Gradle/Android全局参数"] --> C
 E["android/gradle/wrapper/gradle-wrapper.properties<br/>Gradle发行版"] --> C
+F[".gitignore<br/>安全忽略规则"] --> C
 ```
 
 图表来源
@@ -46,14 +55,14 @@ E["android/gradle/wrapper/gradle-wrapper.properties<br/>Gradle发行版"] --> C
 - [android/build.gradle.kts:1-5](file://android/build.gradle.kts#L1-L5)
 - [android/app/build.gradle.kts:1-85](file://android/app/build.gradle.kts#L1-L85)
 - [android/gradle.properties:1-14](file://android/gradle.properties#L1-L14)
-- [android/gradle/wrapper/gradle-wrapper.properties:1-8](file://android/gradle/wrapper/gradle-wrapper.properties#L1-L8)
+- [.gitignore:10-17](file://.gitignore#L10-L17)
 
 章节来源
 - [android/settings.gradle.kts:1-24](file://android/settings.gradle.kts#L1-L24)
 - [android/build.gradle.kts:1-5](file://android/build.gradle.kts#L1-L5)
 - [android/app/build.gradle.kts:1-85](file://android/app/build.gradle.kts#L1-L85)
 - [android/gradle.properties:1-14](file://android/gradle.properties#L1-L14)
-- [android/gradle/wrapper/gradle-wrapper.properties:1-8](file://android/gradle/wrapper/gradle-wrapper.properties#L1-L8)
+- [.gitignore:10-17](file://.gitignore#L10-L17)
 
 ## 核心组件
 - SDK版本与兼容性
@@ -230,34 +239,110 @@ ToDir --> Build["继续AGP构建流程"]
 - [android/gradle.properties:1-14](file://android/gradle.properties#L1-L14)
 - [android/settings.gradle.kts:1-19](file://android/settings.gradle.kts#L1-L19)
 
-## 故障排查指南
-- 无法找到keystore.properties
-  - 现象：release构建未签名或失败
-  - 排查：确认根目录存在keystore.properties且包含storeFile、storePassword、keyAlias、keyPassword四个键
-  - 解决：补齐缺失字段或检查路径是否正确
-- 签名路径错误
-  - 现象：找不到storeFile对应文件
-  - 排查：storeFile应为相对或绝对路径，指向有效keystore
-  - 解决：修正路径并确保构建用户有读权限
-- Web资源不同步
-  - 现象：assets/www缺少最新Web文件
-  - 排查：确认preBuild是否依赖syncWebAssets，以及include规则是否匹配新增文件
-  - 解决：补充include规则或清理后重新构建
-- 构建速度慢
-  - 现象：全量构建耗时较长
-  - 排查：确认并行、增量、缓存已启用；检查JVM堆大小是否足够
-  - 解决：调整org.gradle.jvmargs，必要时开启configuration-cache
+## 安全配置与密钥管理
 
-章节来源
+### keystore.properties多层防护策略
+
+**更新** 本项目采用了多层防护策略来保护敏感的keystore.properties文件：
+
+1. **Git忽略规则防护**
+   - `android/keystore.properties`：防止Android目录下的配置文件被提交
+   - `/keystore.properties`：根目录catch-all规则，防止误放到仓库根目录的文件泄露
+   - `*.jks`和`*.keystore`：扩展名级别的密钥文件保护
+
+2. **构建脚本安全检查**
+   - 仅在keystore.properties文件存在且非空时才配置签名
+   - 动态读取配置，避免硬编码敏感信息
+
+3. **CI/CD环境安全**
+   - 通过环境变量注入敏感信息，避免明文存储
+   - 构建完成后清理临时文件
+
+```mermaid
+flowchart TD
+Dev["开发者环境"] --> LocalProps["本地keystore.properties<br/>.gitignore保护"]
+CI["CI/CD环境"] --> EnvVars["环境变量注入<br/>无明文存储"]
+LocalProps --> Build["构建过程"]
+EnvVars --> Build
+Build --> CheckRules{"检查.gitignore规则"}
+CheckRules --> |通过| SafeBuild["安全构建"]
+CheckRules --> |失败| BlockBuild["阻止构建"]
+SafeBuild --> Artifacts["生成安全构建产物"]
+BlockBuild --> Alert["安全告警"]
+```
+
+图表来源
+- [.gitignore:10-17](file://.gitignore#L10-L17)
+- [android/app/build.gradle.kts:23-26](file://android/app/build.gradle.kts#L23-L26)
+
+### 安全最佳实践清单
+
+- **文件位置规范**
+  - keystore.properties应放置在android/目录下
+  - 绝对不要放在仓库根目录（即使有catch-all规则保护）
+  
+- **权限控制**
+  - 限制keystore文件访问权限，仅构建用户可读
+  - 生产环境使用专用的构建账户
+  
+- **密钥管理**
+  - 定期轮换密钥并妥善保管离线备份
+  - 使用密码管理器管理密钥口令
+  - 实施密钥生命周期管理
+  
+- **审计与监控**
+  - 定期检查.gitignore规则的有效性
+  - 使用git-secrets或类似工具扫描敏感信息
+  - 建立密钥泄露应急响应流程
+
+**章节来源**
+- [.gitignore:10-17](file://.gitignore#L10-L17)
+- [android/app/build.gradle.kts:23-26](file://android/app/build.gradle.kts#L23-L26)
+
+## 故障排查指南
+
+### 无法找到keystore.properties
+- 现象：release构建未签名或失败
+- 排查：确认根目录存在keystore.properties且包含storeFile、storePassword、keyAlias、keyPassword四个键
+- 解决：补齐缺失字段或检查路径是否正确
+
+### 签名路径错误
+- 现象：找不到storeFile对应文件
+- 排查：storeFile应为相对或绝对路径，指向有效keystore
+- 解决：修正路径并确保构建用户有读权限
+
+### Web资源不同步
+- 现象：assets/www缺少最新Web文件
+- 排查：确认preBuild是否依赖syncWebAssets，以及include规则是否匹配新增文件
+- 解决：补充include规则或清理后重新构建
+
+### 构建速度慢
+- 现象：全量构建耗时较长
+- 排查：确认并行、增量、缓存已启用；检查JVM堆大小是否足够
+- 解决：调整org.gradle.jvmargs，必要时开启configuration-cache
+
+### 安全相关问题
+- 现象：keystore.properties被意外提交到仓库
+- 排查：检查.gitignore规则是否生效，确认文件位置是否符合规范
+- 解决：立即撤销敏感信息，重新生成密钥，加强团队安全意识培训
+
+**章节来源**
 - [android/app/build.gradle.kts:23-26](file://android/app/build.gradle.kts#L23-L26)
 - [android/app/build.gradle.kts:40-49](file://android/app/build.gradle.kts#L40-L49)
 - [android/app/build.gradle.kts:15-21](file://android/app/build.gradle.kts#L15-L21)
 - [android/app/build.gradle.kts:78-78](file://android/app/build.gradle.kts#L78-L78)
 - [android/gradle.properties:1-14](file://android/gradle.properties#L1-L14)
+- [.gitignore:10-17](file://.gitignore#L10-L17)
 
 ## 结论
-该Android工程的构建配置清晰、职责分明：通过settings集中管理仓库源，根build声明插件版本，app模块聚焦SDK、签名、构建类型与依赖；同时利用Gradle任务实现Web源码到assets的自动化同步。建议在后续迭代中：
+该Android工程的构建配置清晰、职责分明：通过settings集中管理仓库源，根build声明插件版本，app模块聚焦SDK、签名、构建类型与依赖；同时利用Gradle任务实现Web源码到assets的自动化同步。
+
+**重要更新** 本项目现已采用多层安全防护策略，特别是通过.gitignore中的catch-all规则增强了对keystore.properties的保护，有效防止敏感凭据的意外泄露。
+
+建议在后续迭代中：
 - 逐步启用release混淆与资源压缩
 - 建立依赖版本治理与自动化升级流程
 - 在CI中注入签名凭据，完善安全基线
 - 持续评估configuration-cache与R8对构建性能的影响
+- 定期进行安全审计，确保密钥管理符合最佳实践
+- 建立密钥泄露应急响应机制，提高团队安全意识

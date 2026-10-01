@@ -486,6 +486,9 @@
   function pinFsBar() {
     var bar = $('fs-bar');
     if (!bar || !fsVv) return;
+    // 缩放时布局视口比视觉视口宽，所以既要位移到视觉视口的左上角，也要把宽度收成视觉视口宽，
+    // 否则右对齐的按钮会跑到屏幕外
+    bar.style.width = fsVv.width + 'px';
     bar.style.transform = 'translate(' + fsVv.offsetLeft + 'px,' + fsVv.offsetTop + 'px)';
   }
   // viaRebuild：由 buildPreview 重建后重新进入，此时历史里那条记录还在，不要再压一条
@@ -520,7 +523,7 @@
       fsVv = null;
     }
     var bar = $('fs-bar');
-    if (bar) bar.style.transform = '';
+    if (bar) { bar.style.transform = ''; bar.style.width = ''; }
     if (via === 'rebuild') {
       // 保持 fsPushed，紧接着的 enterFocus(i, true) 会复用同一条记录
     } else {

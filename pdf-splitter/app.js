@@ -37,6 +37,7 @@
       cardResult = $('card-result'), abProg = $('ab-prog'),
       actionBar = $('action-bar');
   var pvGrid = $('pv-grid');
+  var fsLayer = $('pv-focus'), fsHolder = $('fs-holder');
 
   // ---- 工具函数 ----
   function fmtSize(b) {
@@ -83,24 +84,47 @@
   // 从位图算分割线：竖线与空白沟两路证据各算一遍再合并，位置以竖线为准
   function detectCutsFromCanvas(ctx, w, h) {
     var data = ctx.getImageData(0, 0, w, h).data;
-    var colInk = new Int32Array(w), x, y;
-    for (x = 0; x < w; x++) { var c = 0; for (y = 0; y < h; y++) { var p = (y * w + x) * 4; if (data[p] < 200 || data[p + 1] < 200 || data[p + 2] < 200) c++; } colInk[x] = c; }
-    // ① 竖线：贯穿整页且很窄。0.75 是实测分界——真印刷分隔线纵向覆盖率接近 1，
-    // 而左对齐正文的首字符列（每行同一起点）只有约 0.5，旧值 0.45 会把它误认成分隔线。
-    var lineT = Math.round(h * 0.75), isLine = new Uint8Array(w);
-    for (x = 0; x < w; x++) isLine[x] = colInk[x] >= lineT ? 1 : 0;
+    var colInk = new Int32Array(w), colRun = new Int32Array(w), x, y;
+    for (x = 0; x < w; x++) {
+      var c = 0, mx = 0, run = 0;
+      for (y = 0; y < h; y++) {
+        var p = (y * w + x) * 4;
+        if (data[p] < 200 || data[p + 1] < 200 || data[p + 2] < 200) { c++; run++; if (run > mx) mx = run; }
+        else run = 0;
+      }
+      colInk[x] = c; colRun[x] = mx;
+    }
+    // ① 竖线：只认「又密又长」的真分隔线——>=60% 页高有墨，且最长连续段 >=35% 页高。
+    // 这两条都得卡住：单看密度，左对齐正文的首字符列能到 50%；单看连续性，正文里竖排
+    // 对齐的笔画能到 14–18% 页高。真卷实测：印刷实线 91–96% / 连续 53–96%，
+    // 而假线最高只有 44% / 18%。虚线分隔线（密度 46–70%）走 ② 的空白沟，不靠这里。
+    var lineT = Math.round(h * 0.6), longT = Math.round(h * 0.35), isLine = new Uint8Array(w);
+    for (x = 0; x < w; x++) isLine[x] = (colInk[x] >= lineT && colRun[x] >= longT) ? 1 : 0;
     var lineCuts = [];
     groupRuns(isLine, w).forEach(function (r) {
       var wd = r.end - r.start + 1, ctr = (r.start + r.end) / 2 / w;
       if (wd <= Math.max(3, Math.round(w * 0.03)) && ctr > 0.12 && ctr < 0.88) lineCuts.push(ctr);
     });
-    // ② 空白沟分栏：栏数由内容块决定，所以即使已经找到竖线也必须算，否则会漏掉没有印线的边界
-    var bandCuts = [];
+    // ② 空白沟分栏。两条关键处理：
+    //   a) 先把竖线连同两侧 2px 抗锯齿边从墨迹里抹掉，免得线自己变成一"栏"；
+    //   b) 竖线是**不可跨越的屏障**——真卷的分隔线离左右正文常常只有 3px，
+    //      单靠 minGap（2% 页宽 ≈ 8px）会直接跨过它把两栏粘成一整块。
     var inkT = Math.max(2, Math.round(h * 0.012)), hasInk = new Uint8Array(w);
     for (x = 0; x < w; x++) hasInk[x] = colInk[x] > inkT ? 1 : 0;
-    var minGap = Math.max(4, Math.round(w * 0.02)), merged = [];
+    for (x = 0; x < w; x++) {
+      if (!isLine[x]) continue;
+      for (var d = -2; d <= 2; d++) { var nx = x + d; if (nx >= 0 && nx < w) hasInk[nx] = 0; }
+    }
+    var bandCuts = [];
+    var minGap = Math.max(4, Math.round(w * 0.02)), noise = Math.max(3, Math.round(w * 0.015)), merged = [];
     groupRuns(hasInk, w).forEach(function (b) {
-      if (merged.length && b.start - merged[merged.length - 1].end < minGap) merged[merged.length - 1].end = b.end;
+      // 1.5% 页宽以内的细墨列不可能是栏，是沟里的杂点或淡虚线；丢掉它才能露出真正的白沟
+      if (b.end - b.start + 1 < noise) return;
+      var barrier = false;
+      for (var zx = merged.length ? merged[merged.length - 1].end + 1 : b.start; zx < b.start; zx++) {
+        if (isLine[zx]) { barrier = true; break; }
+      }
+      if (merged.length && !barrier && b.start - merged[merged.length - 1].end < minGap) merged[merged.length - 1].end = b.end;
       else merged.push({ start: b.start, end: b.end });
     });
     merged = merged.filter(function (b) { return (b.end - b.start) >= w * 0.03; });
@@ -439,7 +463,33 @@
   // ---- 预览 ----
   var RENDER_W = 820; // 预览 canvas 逻辑宽度
   var previewItems = [];
+  // ---- 单页全屏：把这一页的预览卡整个搬进覆盖层，放大后精细拖/删/加分割线 ----
+  // 只用覆盖层自己铺满视口，不碰原生 Fullscreen API：WebView 里 requestFullscreen 不可靠，
+  // 而它的 fullscreenchange 事件还会和「重建预览后重新进入全屏」抢状态，把焦点弄丢。
+  var fsItem = null;
+  function enterFocus(i) {
+    var it = previewItems[i];
+    if (!it || fsItem || state.busy) return;
+    fsItem = it;
+    it.fsNext = it.el.nextSibling;
+    fsHolder.appendChild(it.el);
+    fsLayer.hidden = false;
+    document.body.classList.add('fs-on');
+  }
+  function exitFocus() {
+    if (!fsItem) return;
+    var it = fsItem;
+    fsItem = null;
+    fsLayer.hidden = true;
+    document.body.classList.remove('fs-on');
+    var next = (it.fsNext && it.fsNext.parentNode === pvGrid) ? it.fsNext : null;
+    pvGrid.insertBefore(it.el, next);
+    it.fsNext = null;
+  }
+
   function buildPreview() {
+    var refocus = fsItem ? fsItem.idx : -1;
+    exitFocus();
     pvGrid.innerHTML = '';
     var items = previewItems = [];
     for (var i = 0; i < state.sizes.length; i++) {
@@ -464,6 +514,10 @@
               '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">' +
                 '<path d="M12 5v14M5 12h14"/></svg>' +
             '</button>' +
+            '<button type="button" class="pv-fs" data-page="' + idx + '" title="全屏查看这一页，便于精细调整分割线" aria-label="全屏查看这一页">' +
+              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                '<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>' +
+            '</button>' +
           '</div>' +
           '<div class="pv-foot"></div>';
         pvGrid.appendChild(item);
@@ -471,6 +525,7 @@
       })(i);
     }
     updateOverlays();
+    if (refocus >= 0) enterFocus(refocus);   // 旋转等重建预览后，全屏层继续盯着同一页
 
     // 懒加载渲染
     if (!('IntersectionObserver' in window)) {
@@ -516,14 +571,15 @@
   }
 
   // 更新切分线（可拖把手）/ 标签 / 输出页数（不重渲染 canvas）
+  // 走 previewItems 而不是查 pvGrid，因为某一项可能被移进全屏层里，那时它不在 pvGrid 下
   function updateOverlays() {
     var total = 0, mismatch = false;
-    var nodes = pvGrid.querySelectorAll('.pv-item');
-    for (var i = 0; i < nodes.length; i++) {
+    var items = previewItems;
+    for (var i = 0; i < items.length; i++) {
       var s = state.sizes[i];
       var bands = bandsFor(i, s.W, s.H);
       var n = bands.length;
-      var layer = nodes[i].querySelector('.cut-layer');
+      var layer = items[i].el.querySelector('.cut-layer');
       var html = '';
       for (var k = 1; k < n; k++) {
         var pct = clamp(bands[k].left / s.W * 100, 1.5, 98.5);
@@ -541,10 +597,10 @@
       layer.style.inset = '0';
       layer.style.pointerEvents = 'none';
       layer.innerHTML = html;
-      var foot = nodes[i].querySelector('.pv-foot');
+      var foot = items[i].el.querySelector('.pv-foot');
       foot.innerHTML = '<span>原第 <b>' + (i + 1) + '</b> 页</span>' +
                        '<span>' + (n === 1 ? '保持 1 页' : '切出 <b>' + n + '</b> 页') + '</span>';
-      var addBtn = nodes[i].querySelector('.pv-add');
+      var addBtn = items[i].el.querySelector('.pv-add');
       if (addBtn) addBtn.disabled = (n - 1 >= MAX_MANUAL_CUTS);   // 满 5 栏置灰，点了也没反应
       if ((state.mode === '2' || state.mode === '3') && n !== parseInt(state.mode, 10)) mismatch = true;
       total += n;
@@ -560,8 +616,10 @@
   }
 
   // ---- 拖动分割线：按住某页的把手横向拖，只改该页那条边界（全局 shift 仍叠加）----
+  // 预览项可能被搬进全屏层（那时它不在 pvGrid 下），所以两个容器挂同一批委托事件
+  function onPreview(evt, fn) { pvGrid.addEventListener(evt, fn); fsHolder.addEventListener(evt, fn); }
   var dragCtx = null;
-  pvGrid.addEventListener('pointerdown', function (e) {
+  onPreview('pointerdown', function (e) {
     var h = e.target.closest('.cut-handle');
     if (!h || state.busy) return;
     if (e.target.closest('.cut-del')) return;   // 下端删除图标是点击，不该触发拖动
@@ -620,13 +678,17 @@
     updateOverlays();
     resetResult();
   }
-  pvGrid.addEventListener('click', function (e) {
+  onPreview('click', function (e) {
     if (state.busy) return;
     var del = e.target.closest('.cut-del');
     if (del) { delCut(parseInt(del.getAttribute('data-page'), 10), parseInt(del.getAttribute('data-k'), 10)); return; }
     var add = e.target.closest('.pv-add');
-    if (add) addCut(parseInt(add.getAttribute('data-page'), 10));
+    if (add) { addCut(parseInt(add.getAttribute('data-page'), 10)); return; }
+    var fs = e.target.closest('.pv-fs');
+    if (fs) enterFocus(parseInt(fs.getAttribute('data-page'), 10));
   });
+  $('fs-exit').addEventListener('click', exitFocus);
+  window.addEventListener('keydown', function (e) { if (e.key === 'Escape') exitFocus(); });
 
   // ---- 设置交互 ----
   function setMode(m) {

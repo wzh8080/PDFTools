@@ -213,7 +213,7 @@
   $('btn-repick').addEventListener('click', function () { fileInput.click(); });
   $('btn-repick2').addEventListener('click', function () { fileInput.click(); });
 
-  // ---- 预览内手动旋转：点某页右上角的 ⟳，该页再顺时针转 90° ----
+  // ---- 预览内手动旋转：点页卡片左上/右上角的 ⟳，该页逆/顺时针转 90° ----
   pvGrid.addEventListener('click', function (e) {
     var btn = e.target.closest('.pv-rot');
     if (!btn) return;
@@ -221,7 +221,9 @@
     var item = btn.closest('.pv-item');
     var idx = item && parseInt(item.getAttribute('data-idx'), 10);
     if (isNaN(idx)) return;
-    state.userRot[idx] = ((state.userRot[idx] || 0) + 90) % 360;
+    var step = parseInt(btn.getAttribute('data-rot'), 10);
+    if (step !== 90 && step !== 270) step = 90;   // 只认 ±90（270 即逆时针 90）
+    state.userRot[idx] = ((state.userRot[idx] || 0) + step) % 360;
     // 旋转会改变页面尺寸/栏数，需重算字节并作废旧结果
     reloadPreview().then(resetResult);
   });
@@ -323,7 +325,11 @@
           '<div class="pv-wrap" style="aspect-ratio:' + Math.round(s.W) + ' / ' + Math.round(s.H) + '">' +
             '<canvas></canvas>' +
             '<div class="cut-layer"></div>' +
-            '<button type="button" class="pv-rot" title="旋转此页 90°" aria-label="旋转此页 90°">' +
+            '<button type="button" class="pv-rot pv-rot-l" data-rot="270" title="此页逆时针转 90°" aria-label="此页逆时针转 90°">' +
+              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                '<polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>' +
+            '</button>' +
+            '<button type="button" class="pv-rot pv-rot-r" data-rot="90" title="此页顺时针转 90°" aria-label="此页顺时针转 90°">' +
               '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
                 '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>' +
               '<span class="rot-tag">' + deg + '°</span>' +

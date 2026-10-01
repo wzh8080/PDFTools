@@ -1,0 +1,52 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: zh-CN
+branch: main
+nodes_managed: true
+exported_at: "2026-10-01T03:06:16Z"
+modules:
+    "":
+        dir_name: 试卷切分助手（PdfSplitter）仓库根
+        title: 试卷切分助手（PdfSplitter）仓库根
+        scope:
+            - README.md
+            - .gitignore
+            - .gitattributes
+            - make_icon.py
+            - verify_split.py
+        source_files: []
+        children:
+            - android_app
+            - pdftool_test
+            - web_app
+        depends_on: []
+        related_to: []
+    android_app:
+        dir_name: PdfSplitter Android 应用外壳
+        title: PdfSplitter Android 应用外壳
+        scope:
+            - android/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: web_app
+    pdftool_test:
+        dir_name: PDF 试卷分栏排版测试脚本集
+        title: PDF 试卷分栏排版测试脚本集
+        scope:
+            - pdftool_test/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    web_app:
+        dir_name: 试卷切分助手（PDF 前端应用）
+        title: 试卷切分助手（PDF 前端应用）
+        scope:
+            - pdf-splitter/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: android_app

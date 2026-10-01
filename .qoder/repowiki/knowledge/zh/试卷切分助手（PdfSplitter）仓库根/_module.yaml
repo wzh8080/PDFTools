@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: ""
+title: 试卷切分助手（PdfSplitter）仓库根
+scope:
+    - README.md
+    - .gitignore
+    - .gitattributes
+    - make_icon.py
+    - verify_split.py
+source_files: []
+depends_on: []
+related_to: []

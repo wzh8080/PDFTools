@@ -226,6 +226,18 @@
     reloadPreview().then(resetResult);
   });
 
+  // ---- 整篇旋转：一次把所有页都转 90°，省去逐页点 ----
+  // 与单页按钮共用同一 userRot 数组（按页累加），所以整篇转后仍可再单页微调
+  function rotateAll(step) {
+    if (state.busy) return;                       // 切分处理中不打断
+    for (var i = 0; i < state.sizes.length; i++) {
+      state.userRot[i] = ((state.userRot[i] || 0) + step) % 360;
+    }
+    reloadPreview().then(resetResult);
+  }
+  $('btn-rot-all-left').addEventListener('click', function () { rotateAll(270); });   // 左旋 90° = +270°
+  $('btn-rot-all-right').addEventListener('click', function () { rotateAll(90); });   // 右旋 90°
+
   function loadFile(file) {
     if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
       alert('请选择 PDF 文件');

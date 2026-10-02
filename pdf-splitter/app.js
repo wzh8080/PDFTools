@@ -709,20 +709,13 @@
     updateOverlays();
     resetResult();
   }
-  // 加号落在当前最宽那一栏的正中；到上限由按钮置灰，这里再兜一道
+  // 加号落在最右边那一栏的正中（新线从右侧出来，再往左拖），到上限由按钮置灰，这里再兜一道
   function addCut(i) {
     if (!(i >= 0)) return;
     var cuts = materializeCuts(i);
     if (cuts.length >= MAX_MANUAL_CUTS) return;
-    var bounds = [0], kk;
-    for (kk = 0; kk < cuts.length; kk++) bounds.push(cuts[kk]);
-    bounds.push(1);
-    var bestK = 1, bestW = 0;
-    for (kk = 1; kk < bounds.length; kk++) {
-      var wd = bounds[kk] - bounds[kk - 1];
-      if (wd > bestW) { bestW = wd; bestK = kk; }
-    }
-    cuts.push((bounds[bestK - 1] + bounds[bestK]) / 2);
+    var last = cuts.length ? cuts[cuts.length - 1] : 0;   // state.cuts 始终升序
+    cuts.push((last + 1) / 2);
     cuts.sort(function (a, b) { return a - b; });
     updateOverlays();
     resetResult();

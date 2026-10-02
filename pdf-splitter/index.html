@@ -88,6 +88,13 @@
   .field.row label b{color:var(--primary);font-weight:700;font-variant-numeric:tabular-nums;}
   .field.row label i{font-style:normal;font-weight:400;color:var(--ink-2);font-size:11px;margin-left:1px;}
   .field.row input[type=range]{flex:1;min-width:0;}
+  /* 参数调整折叠区：三条滑块默认收起，避免配置卡过长 */
+  .adv{margin-top:12px;border-top:1px dashed var(--line);}
+  .adv-sum{display:flex;align-items:center;gap:8px;padding:11px 0;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;list-style:none;-webkit-tap-highlight-color:transparent;}
+  .adv-sum::-webkit-details-marker{display:none;}
+  .adv-chev{flex:none;width:0;height:0;border-left:7px solid var(--primary);border-top:5px solid transparent;border-bottom:5px solid transparent;transition:transform .16s;}
+  .adv[open] .adv-chev{transform:rotate(90deg);}
+  .adv-sub{margin-left:auto;font-size:11.5px;font-weight:400;color:var(--ink-2);}
   .step{flex:none;width:30px;height:30px;border:1.5px solid var(--line);background:#fff;border-radius:8px;font-size:18px;line-height:1;color:var(--primary);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;user-select:none;}
   .step:active{background:var(--primary-soft);border-color:var(--primary);}
   .chk{display:flex;align-items:flex-start;gap:9px;margin-top:16px;font-size:13.5px;font-weight:600;cursor:pointer;}
@@ -274,24 +281,27 @@
         <button data-mode="3">左右 3 栏<span class="seg-sub">一页切成三页</span></button>
         <button data-mode="auto" class="seg-wide">智能识别<span class="seg-sub">按内容空白自动判断每页栏数</span></button>
       </div>
-      <div class="field row">
-        <label for="margin-x-range">左右边距 <b id="margin-x-val">10</b><i>mm</i></label>
-        <button type="button" class="step" data-target="margin-x-range" data-step="-1" aria-label="减少">−</button>
-        <input type="range" id="margin-x-range" min="0" max="20" value="10">
-        <button type="button" class="step" data-target="margin-x-range" data-step="1" aria-label="增加">+</button>
-      </div>
-      <div class="field row">
-        <label for="margin-y-range">上下边距 <b id="margin-y-val">10</b><i>mm</i></label>
-        <button type="button" class="step" data-target="margin-y-range" data-step="-1" aria-label="减少">−</button>
-        <input type="range" id="margin-y-range" min="0" max="20" value="10">
-        <button type="button" class="step" data-target="margin-y-range" data-step="1" aria-label="增加">+</button>
-      </div>
-      <div class="field row">
-        <label for="shift-range">切分线微调 <b id="shift-val">0</b><i>%</i></label>
-        <button type="button" class="step" data-target="shift-range" data-step="-1" aria-label="减少">−</button>
-        <input type="range" id="shift-range" min="-15" max="15" value="0">
-        <button type="button" class="step" data-target="shift-range" data-step="1" aria-label="增加">+</button>
-      </div>
+      <details class="adv" id="adv-box">
+        <summary class="adv-sum"><i class="adv-chev"></i>参数调整<span class="adv-sub">边距 / 切分线微调</span></summary>
+        <div class="field row">
+          <label for="margin-x-range">左右边距 <b id="margin-x-val">10</b><i>mm</i></label>
+          <button type="button" class="step" data-target="margin-x-range" data-step="-1" aria-label="减少">−</button>
+          <input type="range" id="margin-x-range" min="0" max="20" value="10">
+          <button type="button" class="step" data-target="margin-x-range" data-step="1" aria-label="增加">+</button>
+        </div>
+        <div class="field row">
+          <label for="margin-y-range">上下边距 <b id="margin-y-val">10</b><i>mm</i></label>
+          <button type="button" class="step" data-target="margin-y-range" data-step="-1" aria-label="减少">−</button>
+          <input type="range" id="margin-y-range" min="0" max="20" value="10">
+          <button type="button" class="step" data-target="margin-y-range" data-step="1" aria-label="增加">+</button>
+        </div>
+        <div class="field row">
+          <label for="shift-range">切分线微调 <b id="shift-val">0</b><i>%</i></label>
+          <button type="button" class="step" data-target="shift-range" data-step="-1" aria-label="减少">−</button>
+          <input type="range" id="shift-range" min="-15" max="15" value="0">
+          <button type="button" class="step" data-target="shift-range" data-step="1" aria-label="增加">+</button>
+        </div>
+      </details>
       <label class="chk">
         <input type="checkbox" id="trim-chk">
         <span>裁掉页面四周白边<span class="chk-sub">按每栏实际有字范围裁剪，放大后更铺满 A4</span></span>

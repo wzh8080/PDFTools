@@ -105,14 +105,17 @@ updated: 2026-10-01
   - 线上端 `.cut-lbl` 显示编号 `k`（1 起），线下端 `.cut-del` 是**真 `<button>`** 的垃圾桶图标，
     17×15px 与编号标签同量级、`::after` 把触摸热区外扩 6px，点击 `splice(k-1,1)` 删除该线；
     编号与页数由 `updateOverlays()` 重渲染自动重排。
-  - 页右下角 `.pv-add` 红色加号：在**当前最宽那一栏**的正中插入一条线；上限
+  - 页右下角 `.pv-add` 红色加号：新线落在**最右边那一栏**（最后一条线与右页边之间）的正中，
+    用户 2026-10-02 要求「从右边出来」，之前的"落在当前最宽那一栏正中"已废弃 —— 那个位置会随
+    删线/拖动跳来跳去，不好预期。`state.cuts[i]` 始终升序，所以直接取末元素即可，别再 `Math.max`。
+    上限
     `MAX_MANUAL_CUTS = 4`（即每页最多 5 栏）。到顶时按钮**置灰**（`addBtn.disabled`，
     由 `updateOverlays()` 每次刷新），不给文字提示——用户 2026-10-01 明确选了置灰而不是轻提示。
     注意：置灰后 click 事件不再触发，所以以后想加提示就不能置灰。
   - 智能识别的上限独立于手动上限，仍是**最多 3 栏（2 条线）**——`detectCutsFromCanvas` 里
     候选超过两条时只保留两条。手动路径与检测路径的上限不是一回事，别把它们合成一个常量。
-  - `addCut` 里不要写"最宽栏不足 12% 就不分"这类宽度守卫：cuts ≤ 4 时栏数 ≤ 5，
-    最宽那一栏必然 ≥ 20%，该分支永远进不去（已删）。
+  - 测试时用 `click({force:true})` 点已置灰的 `.pv-add` 会**穿到下层**：加号与最右那条线的
+    `.cut-del` 位置重叠，删除优先，于是"点加号没反应"变成"删掉了一条线"。别把这当 bug 报。
   - `.cut-line` 用 `margin-left:-1px` 而不是 `transform` 居中：`transform` 会生成层叠上下文，
     把 `.cut-del` 压在 `.pv-add` 之下（线拖到 96% 时点不到删除）。现由 `.cut-del` 的 `z-index:4`
     高于 `.pv-add` 的 3 保证删除优先。
@@ -150,6 +153,10 @@ updated: 2026-10-01
 - 边距（左右 / 上下）与切分线微调三个滑块，两侧各有 `−` / `+` 步进按钮，点一次动一个单位，
   改值后 `dispatch input` 复用既有 handler，保证数值、标签、预览三者同步并钳制在 min/max。
   上下边距出厂默认 10、范围 0–20（和左右边距一致）。
+  三条滑块收在 `<details id="adv-box">`（标题「参数调整」）里，**默认收起**，配置卡只留分栏方式 + 白边开关。
+  验证折叠是否真生效**不能看 `getClientRects()`**：Chrome 收起的 details 内容仍留有陈旧 rect
+  （实测 `display:block`、rect 有值，但 `elementFromPoint` 命中的是别的元素）；要量 `details` 自身高度
+  或用 `elementFromPoint` 反查。折叠态下 `applyCfgToSliders()` 改 `min/max/value` 照常生效。
 - **滑块只跟拇指走**：原生 `range` 一碰轨道就跳到该位置，手机上误触即改值。解法 `onThumb()` 按
   当前值算出拇指中心（触点宽 24px、留 20px 容差），落在外面就 `preventDefault`。必须同时挂
   `pointerdown` / `mousedown` / `touchstart` 三种事件并都带 `{passive:false}`：鼠标流里

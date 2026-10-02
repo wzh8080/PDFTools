@@ -150,6 +150,11 @@ updated: 2026-10-01
 - 边距（左右 / 上下）与切分线微调三个滑块，两侧各有 `−` / `+` 步进按钮，点一次动一个单位，
   改值后 `dispatch input` 复用既有 handler，保证数值、标签、预览三者同步并钳制在 min/max。
   上下边距出厂默认 10、范围 0–20（和左右边距一致）。
+- **滑块只跟拇指走**：原生 `range` 一碰轨道就跳到该位置，手机上误触即改值。解法 `onThumb()` 按
+  当前值算出拇指中心（触点宽 24px、留 20px 容差），落在外面就 `preventDefault`。必须同时挂
+  `pointerdown` / `mousedown` / `touchstart` 三种事件并都带 `{passive:false}`：鼠标流里
+  `preventDefault(pointerdown)` **不会**顺带取消 `mousedown`，只挂一个必然漏。代价是手指若在
+  轨道上起手想滑动页面会被吞掉，从别处滑即可，用户明确要求过这个取舍。
 - **默认值设置面板**：标题栏右侧齿轮 `#btn-settings` → 底部抽屉 `#settings`（`.sheet` +
   `.sheet-mask`，`body.sheet-on` 锁滚动），可配左右/上下边距的默认值与上下限、以及分栏方式默认值。
   持久化在 `localStorage['pdfsplitter.settings']`，读出后**必须**过一遍 `normalizeCfg()`：
@@ -162,6 +167,10 @@ updated: 2026-10-01
   - `恢复默认` 是删掉 `localStorage` 键再走一遍 normalize，不是把面板填成出厂值；
   - 分栏方式默认值只在 `loadFile()` 时应用（新文件/换文件回到默认），拖动、加删线等本地操作不回卷；
   - Esc 优先级：设置面板 > 全屏层。
+  - 三行配置**必须一行放下**（用户明确否掉过换行）：`.set-row` 用 `flex-wrap:nowrap`，
+    `.set-lab` 固定 82px + `white-space:nowrap`（要容得下最长的「默认分栏方式」），
+    `.set-f` 给 `flex:1;min-width:0`，数字输入 `appearance:textfield` 并隐藏 webkit spin button
+    （不隐藏的话箭头会吃掉宽度）。393 CSS px（小米 10 实际宽度）下三个输入各 39px，实测不溢出。
 - 预览画布外圈用 `box-shadow: 0 0 0 1px #d7deea` 而不是 `border`：`border` 会占 1px 盒尺寸，
   让画布内容与分割线的百分比坐标错位；阴影不改变布局，正好只做视觉分隔（非全屏时页脚的
   「原第 N 页 / 切出 N 页」灰块和试卷纸几乎分不开）。

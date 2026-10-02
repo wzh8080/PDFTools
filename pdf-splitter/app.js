@@ -792,6 +792,24 @@
       }
     });
   });
+  // 滑块只跟「小点」走：手指/鼠标落在轨道上不再跳到该位置（原生 range 一碰就改值，太灵敏）
+  function onThumb(r, x) {
+    var rect = r.getBoundingClientRect();
+    var min = parseFloat(r.min), max = parseFloat(r.max);
+    var t = max > min ? (parseFloat(r.value) - min) / (max - min) : 0;
+    var hit = 24;                                  // 触点宽度，比 UA 画的拇指略宽以留容差
+    var cx = rect.left + t * Math.max(0, rect.width - hit) + hit / 2;
+    return Math.abs(x - cx) <= hit - 4;
+  }
+  document.querySelectorAll('.field.row input[type=range]').forEach(function (r) {
+    ['pointerdown', 'mousedown', 'touchstart'].forEach(function (type) {
+      r.addEventListener(type, function (e) {
+        if (type === 'mousedown' && e.button !== 0) return;
+        var p = e.touches && e.touches.length ? e.touches[0] : e;
+        if (!onThumb(r, p.clientX)) e.preventDefault();
+      }, { passive: false });
+    });
+  });
   // ---- 默认值设置（标题栏齿轮）：边距的默认值与范围、分栏方式默认值，存 localStorage ----
   var CFG_KEY = 'pdfsplitter.settings';
   var CFG_DEFAULT = { mx: { def: 10, min: 0, max: 20 }, my: { def: 10, min: 0, max: 20 }, mode: '2' };

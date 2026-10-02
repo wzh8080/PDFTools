@@ -156,11 +156,12 @@
   .sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
   .sheet-head h2{font-size:16px;margin:0;font-weight:700;}
   .sheet-x{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink-2);font-size:20px;line-height:1;cursor:pointer;padding:0;}
-  .set-row{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap;}
-  .set-lab{flex:none;width:72px;font-size:13px;font-weight:600;color:var(--ink);}
-  .set-f{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--ink-2);}
-  .set-f input{width:58px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:14px;color:var(--ink);background:#fff;}
-  .set-unit{font-style:normal;font-size:12px;color:var(--ink-2);}
+  .set-row{display:flex;align-items:center;gap:6px;margin-top:10px;flex-wrap:nowrap;}
+  .set-lab{flex:none;width:82px;font-size:13px;font-weight:600;color:var(--ink);white-space:nowrap;}
+  .set-f{display:flex;align-items:center;gap:3px;font-size:12px;color:var(--ink-2);flex:1;min-width:0;}
+  .set-f input{flex:1;min-width:0;max-width:52px;padding:6px 4px;border:1px solid var(--line);border-radius:8px;font-size:14px;color:var(--ink);background:#fff;text-align:center;-moz-appearance:textfield;appearance:textfield;}
+  .set-f input::-webkit-outer-spin-button,.set-f input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+  .set-unit{flex:none;font-style:normal;font-size:12px;color:var(--ink-2);}
   .set-sel{flex:1;min-width:140px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;font-size:14px;color:var(--ink);background:#fff;}
   .set-tip{margin:14px 0 0;font-size:11.5px;color:var(--ink-2);line-height:1.5;}
   .sheet-foot{display:flex;gap:10px;margin-top:14px;}
@@ -391,7 +392,7 @@
       <i class="set-unit">mm</i>
     </div>
     <div class="set-row">
-      <span class="set-lab">分栏方式</span>
+      <span class="set-lab">默认分栏方式</span>
       <select id="set-mode" class="set-sel">
         <option value="2">左右 2 栏</option>
         <option value="3">左右 3 栏</option>

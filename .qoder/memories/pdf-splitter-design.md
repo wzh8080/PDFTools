@@ -149,6 +149,22 @@ updated: 2026-10-01
   结束必须同时 `clearProgress()` + 去掉 `busy-lock` + 恢复按钮。
 - 边距（左右 / 上下）与切分线微调三个滑块，两侧各有 `−` / `+` 步进按钮，点一次动一个单位，
   改值后 `dispatch input` 复用既有 handler，保证数值、标签、预览三者同步并钳制在 min/max。
+  上下边距出厂默认 10、范围 0–20（和左右边距一致）。
+- **默认值设置面板**：标题栏右侧齿轮 `#btn-settings` → 底部抽屉 `#settings`（`.sheet` +
+  `.sheet-mask`，`body.sheet-on` 锁滚动），可配左右/上下边距的默认值与上下限、以及分栏方式默认值。
+  持久化在 `localStorage['pdfsplitter.settings']`，读出后**必须**过一遍 `normalizeCfg()`：
+  每项钳到 0–60、保证 `min ≤ def ≤ max`（`def` 越界落回区间端点）、`mode` 只认 `2`/`3`/`auto`，
+  其余一律回落 `2`。坏 JSON 直接当 `{}` 处理，不让设置面板把整个应用带崩。
+  - `applyCfgToSliders()` 同时改滑块 `min/max/value` 与 `state.marginX/Y`，启动时和每次保存后都要跑；
+  - `saveSettings()` 保存后立刻 `fillCfgForm()` 回填**纠正过**的值，让用户看到实际生效的数；
+  - 已有预览时改默认值要即时反映：按新 `mode` 走 `setMode()`，`auto` 则 `detectAllCols()`，
+    否则 `applyEqualCuts()` + `updateOverlays()` + `resetResult()`；
+  - `恢复默认` 是删掉 `localStorage` 键再走一遍 normalize，不是把面板填成出厂值；
+  - 分栏方式默认值只在 `loadFile()` 时应用（新文件/换文件回到默认），拖动、加删线等本地操作不回卷；
+  - Esc 优先级：设置面板 > 全屏层。
+- 预览画布外圈用 `box-shadow: 0 0 0 1px #d7deea` 而不是 `border`：`border` 会占 1px 盒尺寸，
+  让画布内容与分割线的百分比坐标错位；阴影不改变布局，正好只做视觉分隔（非全屏时页脚的
+  「原第 N 页 / 切出 N 页」灰块和试卷纸几乎分不开）。
 - 任何改动 `state.cuts` 的路径（拖动、删除、新增、换模式、`pointercancel`）都必须调
   `resetResult()`，否则结果卡仍可下载旧字节。
 - 涉及系统动作的按钮文案按实际行为措辞：只读预览用「查看文件」，不用「打开文件」。

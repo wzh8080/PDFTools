@@ -44,6 +44,9 @@
   .logo svg{width:24px;height:24px;}
   .topbar h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.2px;}
   .topbar p{margin:0;font-size:12px;color:var(--ink-2);}
+  .gear{margin-left:auto;flex:none;width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--ink-2);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;}
+  .gear:active{background:var(--primary-soft);color:var(--primary);}
+  .gear svg{width:19px;height:19px;}
 
   main{padding:14px 0 0;display:flex;flex-direction:column;gap:12px;}
   .card{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;}
@@ -99,7 +102,7 @@
   .pv-grid{display:flex;flex-direction:column;gap:14px;}
   .pv-item{border:1px solid var(--line);border-radius:10px;overflow:hidden;}
   .pv-wrap{position:relative;width:100%;background:#f3f5f9;}
-  .pv-wrap canvas{display:block;width:100%;height:auto;}
+  .pv-wrap canvas{display:block;width:100%;height:auto;box-shadow:0 0 0 1px #d7deea;}
   /* 命中列宽 10px 好按；虚线由 .cut-bar 只画在上下两个图标之间，不越过图标 */
   .cut-line{position:absolute;top:0;bottom:0;width:10px;margin-left:-5px;pointer-events:none;}
   .cut-bar{position:absolute;top:14px;bottom:15px;left:4px;border-left:2px dashed var(--cut);}
@@ -144,6 +147,24 @@
   body.busy-lock #card-config,body.busy-lock .rot-all,body.busy-lock .cut-handle,body.busy-lock .pv-rot,body.busy-lock .pv-add,body.busy-lock .pv-fs{pointer-events:none;}
   body.busy-lock #card-config,body.busy-lock .rot-all{opacity:.55;}
   body.busy-lock .cut-handle,body.busy-lock .pv-rot,body.busy-lock .pv-add,body.busy-lock .pv-fs{opacity:.4;}
+  /* 默认值设置面板 */
+  .sheet{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;padding:18px;}
+  body.sheet-on{overflow:hidden;}
+  .sheet[hidden]{display:none;}
+  .sheet-mask{position:absolute;inset:0;background:rgba(15,21,35,.55);}
+  .sheet-card{position:relative;width:100%;max-width:420px;max-height:88vh;overflow:auto;background:#fff;border-radius:14px;box-shadow:0 8px 30px rgba(16,24,40,.24);padding:16px;}
+  .sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .sheet-head h2{font-size:16px;margin:0;font-weight:700;}
+  .sheet-x{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink-2);font-size:20px;line-height:1;cursor:pointer;padding:0;}
+  .set-row{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap;}
+  .set-lab{flex:none;width:72px;font-size:13px;font-weight:600;color:var(--ink);}
+  .set-f{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--ink-2);}
+  .set-f input{width:58px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:14px;color:var(--ink);background:#fff;}
+  .set-unit{font-style:normal;font-size:12px;color:var(--ink-2);}
+  .set-sel{flex:1;min-width:140px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;font-size:14px;color:var(--ink);background:#fff;}
+  .set-tip{margin:14px 0 0;font-size:11.5px;color:var(--ink-2);line-height:1.5;}
+  .sheet-foot{display:flex;gap:10px;margin-top:14px;}
+  .sheet-foot .btn{flex:1;}
   .rot-all{display:flex;gap:8px;margin:0 0 12px;}
   .rot-all button{flex:1;border:1.5px solid var(--line);background:#fff;border-radius:9px;padding:8px 6px;font-size:13px;font-weight:600;color:var(--primary);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;}
   .rot-all button:active{background:var(--primary-soft);}
@@ -202,6 +223,12 @@
       <h1>试卷切分助手</h1>
       <p>A3 / A4 拼版试卷 → 单页 A4，直接打印</p>
     </div>
+    <button type="button" class="gear" id="btn-settings" aria-label="默认值设置" title="默认值设置">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V22a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H2a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 3.64 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09a1.7 1.7 0 0 0 1-1.55V2a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.55 1H22a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/>
+      </svg>
+    </button>
   </div>
 </header>
 
@@ -253,9 +280,9 @@
         <button type="button" class="step" data-target="margin-x-range" data-step="1" aria-label="增加">+</button>
       </div>
       <div class="field row">
-        <label for="margin-y-range">上下边距 <b id="margin-y-val">20</b><i>mm</i></label>
+        <label for="margin-y-range">上下边距 <b id="margin-y-val">10</b><i>mm</i></label>
         <button type="button" class="step" data-target="margin-y-range" data-step="-1" aria-label="减少">−</button>
-        <input type="range" id="margin-y-range" min="0" max="40" value="20">
+        <input type="range" id="margin-y-range" min="0" max="20" value="10">
         <button type="button" class="step" data-target="margin-y-range" data-step="1" aria-label="增加">+</button>
       </div>
       <div class="field row">
@@ -337,6 +364,44 @@
     <div class="ab-row">
       <button class="btn btn-ghost" id="btn-repick2">更换文件</button>
       <button class="btn btn-primary" id="btn-process">开始切分</button>
+    </div>
+  </div>
+</div>
+
+<!-- 默认值设置面板 -->
+<div class="sheet" id="settings" hidden>
+  <div class="sheet-mask" id="settings-mask"></div>
+  <div class="sheet-card" role="dialog" aria-modal="true" aria-label="默认值设置">
+    <div class="sheet-head">
+      <h2>默认值设置</h2>
+      <button type="button" class="sheet-x" id="settings-close" aria-label="关闭设置">×</button>
+    </div>
+    <div class="set-row">
+      <span class="set-lab">左右边距</span>
+      <label class="set-f">默认<input type="number" id="set-mx-def" min="0" max="60"></label>
+      <label class="set-f">最小<input type="number" id="set-mx-min" min="0" max="60"></label>
+      <label class="set-f">最大<input type="number" id="set-mx-max" min="0" max="60"></label>
+      <i class="set-unit">mm</i>
+    </div>
+    <div class="set-row">
+      <span class="set-lab">上下边距</span>
+      <label class="set-f">默认<input type="number" id="set-my-def" min="0" max="60"></label>
+      <label class="set-f">最小<input type="number" id="set-my-min" min="0" max="60"></label>
+      <label class="set-f">最大<input type="number" id="set-my-max" min="0" max="60"></label>
+      <i class="set-unit">mm</i>
+    </div>
+    <div class="set-row">
+      <span class="set-lab">分栏方式</span>
+      <select id="set-mode" class="set-sel">
+        <option value="2">左右 2 栏</option>
+        <option value="3">左右 3 栏</option>
+        <option value="auto">智能识别</option>
+      </select>
+    </div>
+    <p class="set-tip">取值 0–60 mm，会自动保证「最小 ≤ 默认 ≤ 最大」。保存后立即生效，并在下次打开时沿用。</p>
+    <div class="sheet-foot">
+      <button type="button" class="btn btn-ghost" id="settings-reset">恢复默认</button>
+      <button type="button" class="btn btn-primary" id="settings-save">保存</button>
     </div>
   </div>
 </div>

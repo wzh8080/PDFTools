@@ -18,9 +18,9 @@
     sizes: [],           // 每页 {W,H}（归一化 + 用户手动旋转后的实际显示尺寸）
     userRot: [],         // 每页用户在预览里手动追加的旋转角度 0/90/180/270
     cuts: [],            // 每页分割线边界占页宽比例（智能识别/手动拖动会写它）
-    mode: '2',           // 默认「左右 2 栏」；取值 '2' / '3' / 'auto'(智能识别)
-    marginX: 10,         // 左右边距 mm，滑块 0–20
-    marginY: 20,         // 上下边距 mm，滑块 0–40（决定放大率）
+    mode: '2',           // 默认「左右 2 栏」；取值 '2' / '3' / 'auto'(智能识别)，实际初值来自设置
+    marginX: 10,         // 左右边距 mm，默认与范围都可改（见 CFG_KEY 设置面板）
+    marginY: 10,         // 上下边距 mm（决定放大率）
     shift: 0,
     trim: false,         // 默认不勾；用户勾过一次就记住（见 TRIM_KEY）
     busy: false,
@@ -418,7 +418,7 @@
       state.ab = ab;
       state.userRot = [];                 // 新文件清空手动旋转
       state.cuts = [];                    // 新文件清空自定义分割线
-      setMode('2');                       // 新文件/换文件：默认回到「左右 2 栏」
+      setMode(cfg.mode);                    // 新文件/换文件：回到设置里的默认分栏方式
       $('fi-name').textContent = file.name;
       cardFile.hidden = false;
       cardConfig.hidden = false;
@@ -737,7 +737,11 @@
     if (fs) enterFocus(parseInt(fs.getAttribute('data-page'), 10));
   });
   $('fs-exit').addEventListener('click', function () { exitFocus(); });
-  window.addEventListener('keydown', function (e) { if (e.key === 'Escape') exitFocus(); });
+  window.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (!$('settings').hidden) { closeSettings(); return; }   // Esc 先关设置面板
+    exitFocus();
+  });
 
   // ---- 设置交互 ----
   function setMode(m) {
@@ -788,6 +792,83 @@
       }
     });
   });
+  // ---- 默认值设置（标题栏齿轮）：边距的默认值与范围、分栏方式默认值，存 localStorage ----
+  var CFG_KEY = 'pdfsplitter.settings';
+  var CFG_DEFAULT = { mx: { def: 10, min: 0, max: 20 }, my: { def: 10, min: 0, max: 20 }, mode: '2' };
+
+  function intIn(v, lo, hi, fb) {
+    var n = Math.round(Number(v));
+    return isFinite(n) && n >= lo && n <= hi ? n : fb;
+  }
+  // 任何输入都归一到「0–60 且 最小 ≤ 默认 ≤ 最大」，越界或非法一律退回出厂值，不报错
+  function normalizeCfg(o) {
+    o = o && typeof o === 'object' ? o : {};
+    function one(x, d) {
+      x = x && typeof x === 'object' ? x : {};
+      var mn = intIn(x.min, 0, 60, d.min), mx = intIn(x.max, 0, 60, d.max);
+      if (mn > mx) { var t = mn; mn = mx; mx = t; }
+      return { min: mn, max: mx, def: intIn(x.def, mn, mx, intIn(d.def, mn, mx, mn)) };
+    }
+    return {
+      mx: one(o.mx, CFG_DEFAULT.mx),
+      my: one(o.my, CFG_DEFAULT.my),
+      mode: (o.mode === '3' || o.mode === 'auto') ? o.mode : '2'
+    };
+  }
+  var cfg = (function () {
+    var raw = {};
+    try { raw = JSON.parse(localStorage.getItem(CFG_KEY) || '{}') || {}; } catch (e) { raw = {}; }
+    return normalizeCfg(raw);
+  })();
+
+  function applyCfgToSliders() {
+    [['margin-x-range', 'margin-x-val', cfg.mx], ['margin-y-range', 'margin-y-val', cfg.my]].forEach(function (t) {
+      var r = $(t[0]);
+      r.min = t[2].min; r.max = t[2].max; r.value = t[2].def;
+      $(t[1]).textContent = t[2].def;
+    });
+    state.marginX = cfg.mx.def;
+    state.marginY = cfg.my.def;
+  }
+  function fillCfgForm() {
+    $('set-mx-def').value = cfg.mx.def; $('set-mx-min').value = cfg.mx.min; $('set-mx-max').value = cfg.mx.max;
+    $('set-my-def').value = cfg.my.def; $('set-my-min').value = cfg.my.min; $('set-my-max').value = cfg.my.max;
+    $('set-mode').value = cfg.mode;
+  }
+  function openSettings() { fillCfgForm(); $('settings').hidden = false; document.body.classList.add('sheet-on'); }
+  function closeSettings() { $('settings').hidden = true; document.body.classList.remove('sheet-on'); }
+  function saveSettings() {
+    cfg = normalizeCfg({
+      mx: { def: $('set-mx-def').value, min: $('set-mx-min').value, max: $('set-mx-max').value },
+      my: { def: $('set-my-def').value, min: $('set-my-min').value, max: $('set-my-max').value },
+      mode: $('set-mode').value
+    });
+    try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch (e) {}
+    applyCfgToSliders();
+    fillCfgForm();                     // 回填自动纠正后的取值，让用户看见实际生效的数
+    if (!cardPreview.hidden) {
+      setMode(cfg.mode);
+      if (cfg.mode === 'auto') { detectAllCols(); }
+      else { applyEqualCuts(parseInt(cfg.mode, 10)); updateOverlays(); resetResult(); }
+    } else {
+      resetResult();
+    }
+    closeSettings();
+  }
+  $('btn-settings').addEventListener('click', openSettings);
+  $('settings-close').addEventListener('click', closeSettings);
+  $('settings-mask').addEventListener('click', closeSettings);
+  $('settings-save').addEventListener('click', saveSettings);
+  $('settings-reset').addEventListener('click', function () {
+    cfg = normalizeCfg(CFG_DEFAULT);
+    try { localStorage.removeItem(CFG_KEY); } catch (e) {}
+    applyCfgToSliders();
+    fillCfgForm();
+    if (!cardPreview.hidden) { setMode(cfg.mode); applyEqualCuts(2); updateOverlays(); }
+    resetResult();
+  });
+  applyCfgToSliders();
+
   // 白边裁剪默认关；用户选过一次就记住（file:// 或隐私模式下 localStorage 会抛，忽略即可）
   var TRIM_KEY = 'pdfsplitter.trimWhite';
   try { state.trim = localStorage.getItem(TRIM_KEY) === '1'; } catch (e) {}

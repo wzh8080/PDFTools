@@ -98,6 +98,10 @@ class MainActivity : ComponentActivity() {
             allowFileAccess = true
             allowContentAccess = true
             cacheMode = android.webkit.WebSettings.LOAD_CACHE_ELSE_NETWORK
+            // 全局禁双指缩放：页面里 user-scalable=no 会被新版 Chromium 忽略，这里才是真闸门；
+            // 进单页全屏层时由 JS 通过 PdfShell.setZoom(true) 临时打开
+            setSupportZoom(false)
+            builtInZoomControls = false
         }
 
         val loader = WebViewAssetLoader.Builder()
@@ -258,6 +262,12 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun log(msg: String?) {
             if (!msg.isNullOrEmpty()) Log.d(TAG, msg)
+        }
+
+        /** 只有单页全屏层需要双指缩放；@JavascriptInterface 跑在后台线程，改 WebSettings 必须回主线程。 */
+        @JavascriptInterface
+        fun setZoom(on: Boolean) {
+            webView.post { webView.settings.setSupportZoom(on) }
         }
     }
 

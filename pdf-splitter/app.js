@@ -492,6 +492,15 @@
     bar.style.transform = 'translate(' + fsVv.offsetLeft + 'px,' + fsVv.offsetTop + 'px)';
   }
   // viaRebuild：由 buildPreview 重建后重新进入，此时历史里那条记录还在，不要再压一条
+  // 双指缩放只在单页全屏层里开。两层闸门一起切：Chromium 从 M123 起会忽略 user-scalable=no
+  // （无障碍策略），WebView 真正的开关是原生 WebSettings.supportZoom，所以还要过 PdfShell。
+  var VP_BASE = 'width=device-width, initial-scale=1.0, viewport-fit=cover';
+  function setPinch(on) {
+    var m = document.querySelector('meta[name=viewport]');
+    if (m) m.setAttribute('content', VP_BASE + (on ? ', maximum-scale=5, user-scalable=yes'
+                                                   : ', maximum-scale=1, user-scalable=no'));
+    if (window.PdfShell && PdfShell.setZoom) { try { PdfShell.setZoom(on); } catch (e) {} }
+  }
   function enterFocus(i, viaRebuild) {
     var it = previewItems[i];
     if (!it || fsItem || state.busy) return;
@@ -500,6 +509,7 @@
     fsHolder.appendChild(it.el);
     fsLayer.hidden = false;
     document.body.classList.add('fs-on');
+    setPinch(true);
     if (window.visualViewport && !fsVv) {
       fsVv = window.visualViewport;
       fsVv.addEventListener('resize', pinFsBar);
@@ -517,6 +527,7 @@
     fsItem = null;
     fsLayer.hidden = true;
     document.body.classList.remove('fs-on');
+    if (via !== 'rebuild') setPinch(false);   // 收回 maximum-scale 时 Chromium 会把已放大的比例夹回 1
     if (fsVv) {
       fsVv.removeEventListener('resize', pinFsBar);
       fsVv.removeEventListener('scroll', pinFsBar);

@@ -64,3 +64,25 @@ Gradle 走 `JAVA_HOME`。PATH 上若另有 `java`（常见是 JDK 8）不影响 
   `configuration-cache=false`。
 - `settings.gradle.kts` 已内置阿里云 maven 镜像（gradle-plugin / google / public）。
 - adb / platform-tools、SDK licenses 均在位。
+
+## 用 CDP 在真机上验 WebView 行为（2026-10-02 实测跑通，不用手指）
+debug 包已 `setWebContentsDebuggingEnabled(true)`，所以：
+
+    PID=$(adb shell pidof com.pdfsplitter.app.debug | tr -d '\r')
+    adb forward tcp:9333 localabstract:webview_devtools_remote_$PID
+    curl -s http://127.0.0.1:9333/json      # 拿 webSocketDebuggerUrl 里的 target id
+
+然后自己发 WS 帧即可（Node 里 `WebSocket` 全局在这个 REPL 环境不可用，用 `node:net` +
+`node:crypto` 手搓握手与掩码帧，约 60 行）。要点：
+- `Runtime.evaluate`（`returnByValue`）读 DOM 状态、`document.querySelector('.pv-fs').click()`
+  驱动页面，比 uiautomator 快得多；
+- **`Input.dispatchGesture` 在 WebView 的 page target 上不存在**（`-32601 wasn't found`），别浪费时间；
+  改用 **`Input.dispatchTouchEvent` 一次给两个 `touchPoints`**，真机上会**真的**触发双指缩放
+  （实测 `visualViewport.scale` 从 1 → 1.58 / 2.03）。这是唯一能在无 root、adb 又合成不出
+  多指的机器上验证缩放手势的路子；
+- 用完必须 `adb forward --remove tcp:9333`，并把 socket `destroy()`。
+
+## Kotlin/SDK 36 小坑
+`WebSettings` 的缩放开关在 SDK 36 上**不能用 Kotlin 属性语法**：`settings.supportZoom = false`
+编译报 `Function invocation 'supportZoom()' expected`，必须写成 `setSupportZoom(false)`。
+`@JavascriptInterface` 方法跑在后台线程，改 `WebSettings` / 任何 View 都要 `webView.post { ... }`。

@@ -134,6 +134,17 @@ updated: 2026-10-01
   - **不要用原生 Fullscreen API**：WebView 里 `requestFullscreen` 不可靠，且它的
     `fullscreenchange` 事件会和"重建后重新进入"抢状态，把焦点弄丢（实测踩过）。覆盖层
     `position:fixed;inset:0` 本身已经铺满视口。
+  - **双指缩放只在这一层开**：`setPinch(on)` 同时切两层闸门 —— 原生 `WebSettings.supportZoom`
+    （走 `PdfShell.setZoom`）和 viewport meta 的 `user-scalable/maximum-scale`。必须两层都切：
+    新版 Chromium 出于无障碍策略会**忽略** `user-scalable=no`，真闸门是 `supportZoom`；
+    而 `supportZoom=false` 时 WebView 干脆无视整个 viewport meta。默认态是**全局禁缩放**
+    （`MainActivity` 里 `setSupportZoom(false)` + meta 带 `maximum-scale=1, user-scalable=no`）。
+    退出时把 meta 收回 `maximum-scale=1`，Chromium 会把已放大的比例**夹回 1**（实测 2.03 → 1），
+    所以不会留下"退出全屏页面还是放大着又缩不回去"的状态。`exitFocus('rebuild')` 分支**不关**缩放，
+    紧接着的 `enterFocus(i, true)` 复用同一条记录；整篇旋转后实测仍停在原页且仍可双指放大。
+    之前"有时能有时不能"的原因：meta 里从来没有 `user-scalable=no`、WebView 的 `supportZoom`
+    又默认 true，所以缩放一直是全局开着的；能不能触发只取决于两指落在哪儿 —— 落在
+    `.cut-handle`（`touch-action:none`）或按钮上时手势被拖拽/点击逻辑吃掉，就不放大。
   - **退出按钮要跟着视觉视口走**：`position:fixed` 是相对*布局*视口定位的，手机上双指缩放后
     工具条会跟内容一起飘。解法：监听 `visualViewport` 的 `resize`/`scroll`，把 `#fs-bar`
     `translate(offsetLeft, offsetTop)` 顶回屏幕角（`pinFsBar()`），退出时清 transform 与监听。

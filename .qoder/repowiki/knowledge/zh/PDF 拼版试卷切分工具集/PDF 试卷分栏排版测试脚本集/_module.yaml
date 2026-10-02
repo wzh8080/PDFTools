@@ -1,8 +1,0 @@
-schema_version: 1
-module_path: pdftool_test
-title: PDF 试卷分栏排版测试脚本集
-scope:
-    - pdftool_test/
-source_files: []
-depends_on: []
-related_to: []

@@ -25,6 +25,9 @@ android/app/src/main/assets/www/
 *.iml
 .DS_Store
 
+# Qoder IDE 自动重建的仓库 wiki（纯生成物，与构建和 .qoder/memories/ 无关，跟踪它只会让工作区常脏）
+.qoder/repowiki/
+
 # 本地调试产物（脚本保留，输出不入库）
 pdftool_test/*.png
 pdftool_test/*.pdf

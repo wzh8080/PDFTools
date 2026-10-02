@@ -98,10 +98,12 @@ class MainActivity : ComponentActivity() {
             allowFileAccess = true
             allowContentAccess = true
             cacheMode = android.webkit.WebSettings.LOAD_CACHE_ELSE_NETWORK
-            // 全局禁双指缩放：页面里 user-scalable=no 会被新版 Chromium 忽略，这里才是真闸门；
-            // 进单页全屏层时由 JS 通过 PdfShell.setZoom(true) 临时打开
+            // 双指手势管线必须在构造时就挂上（builtInZoomControls 决定 WebView 是否接管多指手势，
+            // 运行时再开在部分版本上挂不上），displayZoomControls=false 让它不画 +/- 按钮；
+            // 真正的开关是 supportZoom：默认关，进单页全屏层时由 JS 通过 PdfShell.setZoom(true) 打开
+            setBuiltInZoomControls(true)
+            setDisplayZoomControls(false)
             setSupportZoom(false)
-            builtInZoomControls = false
         }
 
         val loader = WebViewAssetLoader.Builder()

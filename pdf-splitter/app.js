@@ -375,7 +375,8 @@
   $('btn-repick2').addEventListener('click', function () { fileInput.click(); });
 
   // ---- 预览内手动旋转：点页卡片左上/右上角的 ⟳，该页逆/顺时针转 90° ----
-  pvGrid.addEventListener('click', function (e) {
+  // 走 onPreview 而不是只挂 pvGrid：卡片被搬进单页全屏层后就不在 pvGrid 下了
+  onPreview('click', function (e) {
     var btn = e.target.closest('.pv-rot');
     if (!btn) return;
     if (state.busy) return;                       // 切分处理中不打断
@@ -385,8 +386,8 @@
     var step = parseInt(btn.getAttribute('data-rot'), 10);
     if (step !== 90 && step !== 270) step = 90;   // 只认 ±90（270 即逆时针 90）
     state.userRot[idx] = ((state.userRot[idx] || 0) + step) % 360;
-    // 旋转会改变页面尺寸/栏数，需重算字节并作废旧结果
-    reloadPreview().then(resetResult);
+    // 旋转会改变页面尺寸/栏数，需重算字节并作废旧结果；只传页号，别的页不重刷
+    reloadPreview(idx).then(resetResult);
   });
 
   // ---- 整篇旋转：一次把所有页都转 90°，省去逐页点 ----
@@ -439,7 +440,8 @@
 
   // 按当前 userRot 从原始字节重算「已烘焙旋转」的工作字节，并刷新预览。
   // 预览与切分共用这份字节，坐标系才始终一致；每次都从原始 ab 重建，不随点击次数累积失真。
-  function reloadPreview() {
+  // onlyIdx：只有这一页转了 —— 其余页像素没变，保留已画好的位图，别整屏重建（那会闪一下重刷）。
+  function reloadPreview(onlyIdx) {
     return PDFLib.PDFDocument.load(state.ab.slice(0), { ignoreEncryption: true })
       .then(function (doc) { return normalizeRotation(doc); })
       .then(function (norm) {
@@ -447,17 +449,36 @@
         return openPdf();
       })
       .then(function () {
-        buildPreview();
-        if (state.mode === 'auto') detectAllCols();   // 旋转后内容朝向变了，智能识别需重算
+        if (onlyIdx == null || !previewItems[onlyIdx]) {
+          buildPreview();
+          if (state.mode === 'auto') detectAllCols();   // 旋转后内容朝向变了，智能识别需重算
+          return;
+        }
+        return refreshPage(onlyIdx);
       });
   }
 
+  function refreshPage(idx) {
+    var it = previewItems[idx], s = state.sizes[idx];
+    it.s = s;
+    it.el.querySelector('.pv-wrap').style.aspectRatio = Math.round(s.W) + ' / ' + Math.round(s.H);
+    it.rendered = false;
+    it.painted = false;      // 旧位图是旧朝向的，别让裁白边复用
+    var p = renderItem(it);
+    updateOverlays();
+    if (state.mode !== 'auto') return p;
+    // 智能识别下只有这一页的朝向变了，其余页的检测结论仍然成立
+    return analyzeCuts(idx).then(function (c) { state.cuts[idx] = c; updateOverlays(); });
+  }
+
+  // 最近一次「换 pdf.js 文档」的完成时机：被 destroy 取消的渲染要等它才能补画
+  var docReady = Promise.resolve();
   function openPdf() {
     // 换文件时释放上一份：pdf.js 的文档缓存与 worker 会一直占着内存，手机上吃紧
     var prev = state.pdf;
     state.pdf = null;
     var rel = prev ? prev.destroy().catch(function () {}) : Promise.resolve();
-    return rel.then(function () {
+    docReady = rel.then(function () {
       return pdfjsLib.getDocument({ data: state.bytes.slice(0) }).promise;
     }).then(function (pdf) {
       state.pdf = pdf;
@@ -472,6 +493,7 @@
         state.sizes = arr;
       });
     });
+    return docReady;
   }
 
   // ---- 预览 ----
@@ -625,7 +647,19 @@
       return page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
     }).then(function () {
       it.painted = true;   // 位图真正可用，裁白边时可以直接复用
-    }).catch(function (e) { console.error('render', it.idx, e); });
+      it.retries = 0;
+    }).catch(function (e) {
+      // 旋转后要换 pdf.js 文档，destroy 会取消在飞的渲染，被取消的页留下一张空 canvas；
+      // 而它已经 rendered=true 且被 IO unobserve 过，没人会再画它 —— 等新文档就位后补画一次
+      it.painted = false;
+      it.rendered = false;
+      console.error('render', it.idx, e);
+      if ((it.retries = (it.retries || 0) + 1) <= 2) {
+        docReady.then(function () {
+          if (state.pdf && previewItems[it.idx] === it && !it.rendered) renderItem(it);
+        }).catch(function () {});
+      }
+    });
     it.rendered = true;
     return vp;
   }
